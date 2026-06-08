@@ -2168,9 +2168,7 @@ const m = L.circleMarker([lat, lon], {
   };
 }
 
-/** Walk a JSZip and collect by filetype. Returns { prjByBase, sheetEntries, innerZipBuffers }.
- *  Now handles nested RAR files inside ZIP/RAR archives — converts each inner RAR
- *  to an in-memory ZIP then recurses into it, just like inner ZIPs. */
+/** Walk a JSZip and collect by filetype. Returns { prjByBase, sheetEntries }. */
 async function indexArchive(zip, _depth) {
   _depth = _depth || 0;
   const MAX_DEPTH = 5;
@@ -2185,10 +2183,8 @@ async function indexArchive(zip, _depth) {
 
     if (ext === "prj") {
       prjByBase[base] = await e.async("string");
-
     } else if (["xlsx","xls","csv"].includes(ext)) {
       sheetEntries.push(e);
-
     } else if (ext === "zip" && _depth < MAX_DEPTH) {
       try {
         const innerBuf = await e.async("arraybuffer");
@@ -2200,23 +2196,6 @@ async function indexArchive(zip, _depth) {
         innerZipBuffers.push(...inner.innerZipBuffers);
       } catch (err) {
         console.warn("Failed to open nested ZIP:", e.name, err);
-      }
-
-    } else if (ext === "rar" && _depth < MAX_DEPTH) {
-      // ── RAR جوا ZIP أو RAR: نفكّه ونحوّله لـ ZIP ونكمل زي أي ZIP داخلي ──
-      try {
-        const rarBuf = await e.async("arraybuffer");
-        // فك الـ RAR الداخلي → ZIP buffer
-        const zipBuf = await viaBuiltinRar(rarBuf);
-        const innerZip = await JSZip.loadAsync(zipBuf);
-        const inner = await indexArchive(innerZip, _depth + 1);
-        Object.assign(prjByBase, inner.prjByBase);
-        sheetEntries.push(...inner.sheetEntries);
-        // أضف الـ ZIP المحوّل كمصدر للـ shpjs
-        innerZipBuffers.push({ name: base, buf: zipBuf });
-        innerZipBuffers.push(...inner.innerZipBuffers);
-      } catch (err) {
-        console.warn("Failed to open nested RAR:", e.name, err);
       }
     }
   }
@@ -3150,15 +3129,16 @@ const naYPreview = naY - vbY;
     const next = new Set(s); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
 
-  /* ── Label: stores screen px position relative to SVG element ── */
-  const addLabelAtPoint = (screenX, screenY, text) => {
+  /* ── Label: stored in FULL SCENE coords (same space as polygon rings).
+     sceneX/Y are stable — zoom/pan/export all use the same toX/toY.        ── */
+  const addLabelAtPoint = (sceneX, sceneY, text) => {
     const v = (text ?? "").toString().trim();
     if (!v) return;
     const id = "free_" + Date.now() + "_" + nextLabelId;
     setNextLabelId(n => n + 1);
     setLabelItems(prev => {
       const next = new Map(prev);
-      next.set(id, { text: v, screenX, screenY, fontPx: labelPx });
+      next.set(id, { text: v, sceneX, sceneY, fontPx: labelPx });
       return next;
     });
     setSelectedLabel(id);
@@ -3168,9 +3148,8 @@ const naYPreview = naY - vbY;
   const commitInline = () => {
     if (!inlineInput) return;
     const v = inlineInput.value.trim();
-    const sx = inlineInput.screenX, sy = inlineInput.screenY;
     setInlineInput(null);
-    if (v) addLabelAtPoint(sx, sy, v);
+    if (v) addLabelAtPoint(inlineInput.sceneX, inlineInput.sceneY, v);
   };
   const cancelInline = () => setInlineInput(null);
 
@@ -3188,15 +3167,21 @@ const naYPreview = naY - vbY;
     }
     const svg = svgRef.current;
     if (!svg) return;
-    const svgRect = svg.getBoundingClientRect();
-    const sx = e.clientX - svgRect.left;
-    const sy = e.clientY - svgRect.top;
+    // ── حوّل نقطة الضغط لوحدات الـ SVG viewBox (preview space) عبر CTM ──
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const svgPt = pt.matrixTransform(ctm.inverse());
+    // svgPt.x/y = preview space (scene - vbX/vbY) → نضيف vbX/vbY للـ full scene
+    const sceneX = svgPt.x + vbX;
+    const sceneY = svgPt.y + vbY;
+
     const wrap = wrapperRef.current;
     if (!wrap) return;
     const wrect = wrap.getBoundingClientRect();
     setInlineInput({
-      screenX: sx,
-      screenY: sy,
+      sceneX, sceneY,
       screenXWrap: e.clientX - wrect.left,
       screenYWrap: e.clientY - wrect.top,
       value: "",
@@ -3217,22 +3202,34 @@ const naYPreview = naY - vbY;
     return { x: tp.x, y: tp.y };
   };
 
-  /* ── Label drag — works in screen px ── */
+  /* ── Label drag — delta computed in SVG scene space via CTM ── */
   const onLabelMouseDown = (e, id) => {
     e.stopPropagation();
     const item = labelItems.get(id);
     if (!item) return;
-    const startMX = e.clientX, startMY = e.clientY;
-    const startSX = item.screenX, startSY = item.screenY;
     setSelectedLabel(id);
+    const startMX = e.clientX, startMY = e.clientY;
+    const startScX = item.sceneX, startScY = item.sceneY;
+    const svg = svgRef.current;
     const onMove = (ev) => {
-      const dx = ev.clientX - startMX;
-      const dy = ev.clientY - startMY;
+      let dScX = 0, dScY = 0;
+      if (svg) {
+        const ctm = svg.getScreenCTM();
+        if (ctm) {
+          const inv = ctm.inverse();
+          const p0 = svg.createSVGPoint(); p0.x = startMX; p0.y = startMY;
+          const p1 = svg.createSVGPoint(); p1.x = ev.clientX; p1.y = ev.clientY;
+          const s0 = p0.matrixTransform(inv);
+          const s1 = p1.matrixTransform(inv);
+          dScX = s1.x - s0.x;
+          dScY = s1.y - s0.y;
+        }
+      }
       setLabelItems(prev => {
         const next = new Map(prev);
         const cur = next.get(id);
         if (!cur) return prev;
-        next.set(id, { ...cur, screenX: startSX + dx, screenY: startSY + dy });
+        next.set(id, { ...cur, sceneX: startScX + dScX, sceneY: startScY + dScY });
         return next;
       });
     };
@@ -3275,7 +3272,7 @@ const naYPreview = naY - vbY;
     setSelectedLabel(null);
 
     // ── نرسم على Canvas 2D مباشرة — بدون SVG ──
-    const W = 3200;
+    const W = 1000;
     const H = Math.round(W * vbH / vbW);
     const canvas = document.createElement('canvas');
     canvas.width  = W;
@@ -3364,27 +3361,21 @@ const naYPreview = naY - vbY;
       });
     });
 
-    // ── ارسم الترميزات (labels) ──
-    // screenX/Y هي pixel coords relative to SVG element
-    // نحولها لـ canvas coords بنسبة W / svgElement.width
-    var svgEl = svgRef.current;
-    if (svgEl && labelItems.size > 0) {
-      var svgRect2 = svgEl.getBoundingClientRect();
-      var scaleX = W / svgRect2.width;
-      var scaleY = H / svgRect2.height;
+    // ── ارسم الترميزات (labels) — sceneX/Y → canvas pixels via toX/toY ──
+    if (labelItems.size > 0) {
+      var svgEl2 = svgRef.current;
+      var svgW2 = svgEl2 ? svgEl2.getBoundingClientRect().width : 800;
       labelItems.forEach(function(item) {
-        var cx3 = item.screenX * scaleX;
-        var cy3 = item.screenY * scaleY;
-        var fs  = item.fontPx * scaleX;
+        var cx3 = toX(item.sceneX);
+        var cy3 = toY(item.sceneY);
+        var fs = Math.max(8, Math.round(item.fontPx / svgW2 * W));
         ctx.font = 'bold ' + fs + 'px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        // ظل أبيض
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth   = fs * 0.25;
         ctx.lineJoin    = 'round';
         ctx.strokeText(item.text, cx3, cy3);
-        // النص
         ctx.fillStyle = '#000000';
         ctx.fillText(item.text, cx3, cy3);
       });
@@ -3698,39 +3689,48 @@ const naYPreview = naY - vbY;
                 </g>
               </svg>
             )}
-            {/* HTML label overlays — positioned in screen px over the SVG */}
-            {svgRef.current && [...labelItems.entries()].map(([id, item]) => {
-              const isSelected = selectedLabel === id;
-              const svgRect = svgRef.current.getBoundingClientRect();
+            {/* HTML label overlays — recomputed from sceneX/Y every render via CTM
+                so they stay pinned to the drawing regardless of zoom or pan.        */}
+            {svgRef.current && (() => {
+              const svg = svgRef.current;
+              const ctm = svg.getScreenCTM();
               const wrapRect = wrapperRef.current?.getBoundingClientRect();
-              if (!wrapRect) return null;
-              const left = (svgRect.left - wrapRect.left) + item.screenX;
-              const top  = (svgRect.top  - wrapRect.top)  + item.screenY;
-              return (
-                <div key={id} style={{
-                  position:"absolute", left, top,
-                  transform:"translate(-50%,-50%)",
-                  fontSize: item.fontPx, fontFamily:"Arial,sans-serif", fontWeight:"bold",
-                  color:"black", textShadow:"0 0 4px white,0 0 8px white",
-                  whiteSpace:"nowrap", cursor:"move", userSelect:"none",
-                  outline: isSelected ? "2px dashed #2563eb" : "none",
-                  padding:"2px 4px", lineHeight:1, zIndex:20,
-                }}
-                  onClick={e => { e.stopPropagation(); setSelectedLabel(id); }}
-                  onMouseDown={e => { e.stopPropagation(); onLabelMouseDown(e, id); }}
-                >
-                  {item.text}
-                  {isSelected && (
-                    <>
-                      <span title="حذف" style={{position:"absolute",top:-8,right:-8,width:16,height:16,background:"#ef4444",color:"white",borderRadius:4,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}
-                        onClick={e => { e.stopPropagation(); setLabelItems(p => { const n=new Map(p); n.delete(id); return n; }); setSelectedLabel(null); }}>✕</span>
-                      <span title="تغيير الحجم" style={{position:"absolute",bottom:-8,right:-8,width:16,height:16,background:"#2563eb",color:"white",borderRadius:4,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",cursor:"se-resize"}}
-                        onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, id); }}>◢</span>
-                    </>
-                  )}
-                </div>
-              );
-            })}
+              if (!ctm || !wrapRect) return null;
+              return [...labelItems.entries()].map(([id, item]) => {
+                const isSelected = selectedLabel === id;
+                // sceneX/Y → preview space (طرح vbX/vbY) → شاشة عبر CTM
+                const pt = svg.createSVGPoint();
+                pt.x = item.sceneX - vbX;
+                pt.y = item.sceneY - vbY;
+                const screen = pt.matrixTransform(ctm);
+                const left = screen.x - wrapRect.left;
+                const top  = screen.y - wrapRect.top;
+                return (
+                  <div key={id} style={{
+                    position:"absolute", left, top,
+                    transform:"translate(-50%,-50%)",
+                    fontSize: item.fontPx, fontFamily:"Arial,sans-serif", fontWeight:"bold",
+                    color:"black", textShadow:"0 0 4px white,0 0 8px white",
+                    whiteSpace:"nowrap", cursor:"move", userSelect:"none",
+                    outline: isSelected ? "2px dashed #2563eb" : "none",
+                    padding:"2px 4px", lineHeight:1, zIndex:20,
+                  }}
+                    onClick={e => { e.stopPropagation(); setSelectedLabel(id); }}
+                    onMouseDown={e => { e.stopPropagation(); onLabelMouseDown(e, id); }}
+                  >
+                    {item.text}
+                    {isSelected && (
+                      <>
+                        <span title="حذف" style={{position:"absolute",top:-8,right:-8,width:16,height:16,background:"#ef4444",color:"white",borderRadius:4,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}
+                          onClick={e => { e.stopPropagation(); setLabelItems(p => { const n=new Map(p); n.delete(id); return n; }); setSelectedLabel(null); }}>✕</span>
+                        <span title="تغيير الحجم" style={{position:"absolute",bottom:-8,right:-8,width:16,height:16,background:"#2563eb",color:"white",borderRadius:4,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",cursor:"se-resize"}}
+                          onMouseDown={e => { e.stopPropagation(); onResizeMouseDown(e, id); }}>◢</span>
+                      </>
+                    )}
+                  </div>
+                );
+              });
+            })()}
             {/* Floating inline label editor */}
             {inlineInput && (() => {
               const wrect = wrapperRef.current?.getBoundingClientRect();
@@ -3739,23 +3739,7 @@ const naYPreview = naY - vbY;
               const left = Math.max(8, Math.min(wrapW - inputW - 8, inlineInput.screenXWrap - 8));
               const top  = Math.max(8, Math.min(wrapH - 60, inlineInput.screenYWrap - labelPx * 1.6));
               return (
-                <div
-                  className="absolute z-30 flex items-center gap-1 pointer-events-auto"
-                  style={{ left, top }}
-                >
-                  {/* Crosshair marker showing where the label will land */}
-                  <div
-                    className="absolute"
-                    style={{
-                      left: inlineInput.screenX - left - 5,
-                      top: inlineInput.screenY - top - 5,
-                      width: 10, height: 10,
-                      border: "2px solid #2563eb",
-                      borderRadius: "9999px",
-                      background: "rgba(37,99,235,0.15)",
-                      pointerEvents: "none",
-                    }}
-                  ></div>
+                <div className="absolute z-30 pointer-events-auto" style={{ left, top }}>
                   <input
                     ref={inputRef}
                     type="text"
@@ -3769,18 +3753,11 @@ const naYPreview = naY - vbY;
                     placeholder="اكتب الترميز…"
                     autoFocus
                     style={{
-                      width: 200,
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      border: "2px solid #2563eb",
-                      background: "white",
-                      fontSize: 14,
-                      fontWeight: 600,
-                      fontFamily: "Arial, sans-serif",
-                      color: "#0f172a",
-                      outline: "none",
-                      boxShadow: "0 6px 16px -6px rgba(15,23,42,0.35)",
-                      textAlign: "center",
+                      width: 200, padding: "6px 10px", borderRadius: 8,
+                      border: "2px solid #2563eb", background: "white",
+                      fontSize: 14, fontWeight: 600, fontFamily: "Arial, sans-serif",
+                      color: "#0f172a", outline: "none",
+                      boxShadow: "0 6px 16px -6px rgba(15,23,42,0.35)", textAlign: "center",
                     }}
                     dir="rtl"
                   />
@@ -5061,17 +5038,6 @@ useEffect(() => {
       .map(d => ({ name: d.name, crs: d.crs }));
     if (problematic.length > 0) {
       setCrsWarning({ items: problematic });
-    }
-
-    // ── تحذير طبقات LINE (خطوط) — نحذّر بس مش نمنع ──
-    const lineLayers = defs.filter(d => d.kind === "shapefile" && d.geomType === "LineString");
-    if (lineLayers.length > 0) {
-      const names = lineLayers.map(d => `"${d.name}"`).join(" ، ");
-      showToast(
-        `⚠️ تنبيه: ${lineLayers.length > 1 ? "الطبقات التالية تحتوي" : "الطبقة التالية تحتوي"} على خطوط (LINE): ${names}`,
-        "info",
-        7000
-      );
     }
 
     setBusy(null);
