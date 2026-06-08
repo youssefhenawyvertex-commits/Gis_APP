@@ -474,14 +474,14 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
        LIGHT MODE (default)
        ══════════════════════════════════════════════════════ */
     :root {
-      --bg:        #f5f6f8;
+      --bg:        #eef1f6;
       --panel:     #ffffff;
-      --panel-2:   #f8fafc;
+      --panel-2:   #f6f8fb;
       --ink:       #0f172a;
       --ink-soft:  #475569;
       --muted:     #94a3b8;
-      --line:      #e2e8f0;
-      --line-2:    #eef1f5;
+      --line:      #dde3ec;
+      --line-2:    #e7ecf3;
 
       --accent:        oklch(0.55 0.10 195);
       --accent-soft:   oklch(0.96 0.02 195);
@@ -492,10 +492,12 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
 
       /* used by overrides below */
       --tw-bg-white:      #ffffff;
-      --tw-bg-slate50:    #f8fafc;
-      --tw-bg-slate100:   #f1f5f9;
-      --tw-bg-slate200:   #e2e8f0;
+      --tw-bg-slate50:    #f6f8fb;
+      --tw-bg-slate100:   #eef1f6;
+      --tw-bg-slate200:   #e2e8f1;
       --tw-bg-slate900:   #0f172a;
+      --tw-bg-slate300:   #cbd3df;
+      --tw-bg-slate800:   #1e293b;
       --tw-text-slate900: #0f172a;
       --tw-text-slate800: #1e293b;
       --tw-text-slate700: #334155;
@@ -504,16 +506,17 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
       --tw-text-slate400: #94a3b8;
       --tw-text-slate300: #cbd5e1;
       --tw-text-white:    #ffffff;
-      --tw-border-slate200: #e2e8f0;
-      --tw-border-slate300: #cbd5e1;
-      --leaflet-bg: #e9eef4;
+      --tw-border-slate100: #e7ecf3;
+      --tw-border-slate200: #dde3ec;
+      --tw-border-slate300: #c8d1de;
+      --leaflet-bg: #e4e9f1;
       --leaflet-ctrl-bg: #ffffff;
       --leaflet-attr-bg: rgba(255,255,255,0.85);
       --leaflet-popup-bg: #ffffff;
       --leaflet-popup-border: transparent;
       --leaflet-popup-shadow: 0 10px 28px -10px rgba(15,23,42,0.25);
       --point-label-bg: rgba(255,255,255,0.92);
-      --scrollbar-thumb: #cbd5e1;
+      --scrollbar-thumb: #c8d1de;
       --shadow-lg:  0 4px 14px -6px rgba(15,23,42,0.14);
       --shadow-md:  0 2px 8px  -4px rgba(15,23,42,0.14);
       --shadow-xl:  0 8px 24px -8px rgba(15,23,42,0.18);
@@ -523,14 +526,14 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
        DARK MODE  — activated by  <html data-theme="dark">
        ══════════════════════════════════════════════════════ */
     [data-theme="dark"] {
-      --bg:        #0d1117;
-      --panel:     #161b22;
-      --panel-2:   #1c2330;
+      --bg:        #0e131a;
+      --panel:     #161d28;
+      --panel-2:   #1e2734;
       --ink:       #e6edf3;
       --ink-soft:  #8b949e;
       --muted:     #484f58;
-      --line:      #30363d;
-      --line-2:    #21262d;
+      --line:      #303c4b;
+      --line-2:    #222c39;
 
       --accent:        oklch(0.65 0.13 195);
       --accent-soft:   oklch(0.18 0.04 195);
@@ -539,11 +542,13 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
       --danger-soft:   oklch(0.18 0.05 25);
       --ok:            oklch(0.68 0.15 155);
 
-      --tw-bg-white:      #161b22;
-      --tw-bg-slate50:    #1c2330;
-      --tw-bg-slate100:   #1c2330;
-      --tw-bg-slate200:   #21262d;
+      --tw-bg-white:      #161d28;
+      --tw-bg-slate50:    #1e2734;
+      --tw-bg-slate100:   #1e2734;
+      --tw-bg-slate200:   #283242;
       --tw-bg-slate900:   #e6edf3;
+      --tw-bg-slate300:   #303c4b;
+      --tw-bg-slate800:   #d0d7de;
       --tw-text-slate900: #e6edf3;
       --tw-text-slate800: #d0d7de;
       --tw-text-slate700: #b0bac4;
@@ -552,16 +557,17 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
       --tw-text-slate400: #484f58;
       --tw-text-slate300: #30363d;
       --tw-text-white:    #0d1117;
-      --tw-border-slate200: #30363d;
-      --tw-border-slate300: #3d444d;
-      --leaflet-bg: #1a2030;
-      --leaflet-ctrl-bg: #161b22;
-      --leaflet-attr-bg: rgba(13,17,23,0.85);
-      --leaflet-popup-bg: #161b22;
-      --leaflet-popup-border: #30363d;
+      --tw-border-slate100: #222c39;
+      --tw-border-slate200: #303c4b;
+      --tw-border-slate300: #3b4858;
+      --leaflet-bg: #141b26;
+      --leaflet-ctrl-bg: #161d28;
+      --leaflet-attr-bg: rgba(14,19,26,0.85);
+      --leaflet-popup-bg: #161d28;
+      --leaflet-popup-border: #303c4b;
       --leaflet-popup-shadow: 0 10px 32px -8px rgba(0,0,0,0.7);
-      --point-label-bg: rgba(22,27,34,0.93);
-      --scrollbar-thumb: #30363d;
+      --point-label-bg: rgba(22,29,40,0.93);
+      --scrollbar-thumb: #303c4b;
       --shadow-lg:  0 4px 24px -6px rgba(0,0,0,0.55);
       --shadow-md:  0 2px 14px -4px rgba(0,0,0,0.55);
       --shadow-xl:  0 8px 32px -8px rgba(0,0,0,0.65);
@@ -587,6 +593,8 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
     .bg-slate-100   { background-color: var(--tw-bg-slate100) !important; }
     .bg-slate-200   { background-color: var(--tw-bg-slate200) !important; }
     .bg-slate-900   { background-color: var(--tw-bg-slate900) !important; }
+    .bg-slate-300   { background-color: var(--tw-bg-slate300) !important; }
+    .bg-slate-800   { background-color: var(--tw-bg-slate800) !important; }
 
     .text-slate-900 { color: var(--tw-text-slate900) !important; }
     .text-slate-800 { color: var(--tw-text-slate800) !important; }
@@ -598,16 +606,21 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
     .text-white     { color: var(--tw-text-white)    !important; }
 
     .border-slate-200 { border-color: var(--tw-border-slate200) !important; }
+    .border-slate-100 { border-color: var(--tw-border-slate100) !important; }
     .border-slate-300 { border-color: var(--tw-border-slate300) !important; }
 
     .hover\:bg-slate-50:hover  { background-color: var(--tw-bg-slate50)  !important; }
     .hover\:bg-slate-100:hover { background-color: var(--tw-bg-slate100) !important; }
     .hover\:bg-slate-200:hover { background-color: var(--tw-bg-slate200) !important; }
+    .hover\:bg-slate-800:hover { background-color: var(--tw-bg-slate800) !important; }
     .hover\:border-slate-300:hover { border-color: var(--tw-border-slate300) !important; }
     .hover\:border-slate-400:hover { border-color: var(--tw-text-slate400) !important; }
     .focus\:bg-white:focus { background-color: var(--tw-bg-white) !important; }
 
     .bg-slate-50\/30 { background-color: color-mix(in srgb, var(--tw-bg-slate50) 30%, transparent) !important; }
+    .bg-slate-50\/40 { background-color: color-mix(in srgb, var(--tw-bg-slate50) 40%, transparent) !important; }
+    .bg-slate-50\/50 { background-color: color-mix(in srgb, var(--tw-bg-slate50) 50%, transparent) !important; }
+    .bg-slate-50\/60 { background-color: color-mix(in srgb, var(--tw-bg-slate50) 60%, transparent) !important; }
 
     .shadow-lg  { box-shadow: var(--shadow-lg)  !important; }
     .shadow-md  { box-shadow: var(--shadow-md)  !important; }
@@ -2168,7 +2181,8 @@ const m = L.circleMarker([lat, lon], {
   };
 }
 
-/** Walk a JSZip and collect by filetype. Returns { prjByBase, sheetEntries }. */
+/** Walk a JSZip and collect by filetype. Returns { prjByBase, sheetEntries, innerZipBuffers }.
+ *  Handles nested ZIP and nested RAR (converts RAR→ZIP on the fly). */
 async function indexArchive(zip, _depth) {
   _depth = _depth || 0;
   const MAX_DEPTH = 5;
@@ -2196,6 +2210,20 @@ async function indexArchive(zip, _depth) {
         innerZipBuffers.push(...inner.innerZipBuffers);
       } catch (err) {
         console.warn("Failed to open nested ZIP:", e.name, err);
+      }
+    } else if (ext === "rar" && _depth < MAX_DEPTH) {
+      // ── RAR داخل ZIP — نحوله لـ ZIP ونعاملوه كـ ZIP داخلي ──
+      try {
+        const rarBuf = await e.async("arraybuffer");
+        const convertedBuf = await viaBuiltinRar(rarBuf);
+        const innerZip = await JSZip.loadAsync(convertedBuf);
+        const inner = await indexArchive(innerZip, _depth + 1);
+        Object.assign(prjByBase, inner.prjByBase);
+        sheetEntries.push(...inner.sheetEntries);
+        innerZipBuffers.push({ name: base, buf: convertedBuf });
+        innerZipBuffers.push(...inner.innerZipBuffers);
+      } catch (err) {
+        console.warn("Failed to open nested RAR:", e.name, err);
       }
     }
   }
@@ -2278,12 +2306,43 @@ async function filesToZipBuffer(fileList) {
   return await newZip.generateAsync({ type: "arraybuffer" });
 }
 
-/** Main RAR → ZIP converter */
+/** Main RAR → ZIP converter — يعالج الـ nested RARs داخل RAR بشكل recursive */
 async function viaBuiltinRar(arBuffer) {
   const fileList = await extractRarWasm(arBuffer);
   if (fileList.length === 0) throw new Error("RAR archive is empty or extraction failed");
   const flat = flattenFileList(fileList);
-  return await filesToZipBuffer(flat);
+
+  // ── فحص لو في RAR داخل RAR ──
+  const nestedRars   = flat.filter(f => /\.rar$/i.test(f.name));
+  const regularFiles = flat.filter(f => !/\.rar$/i.test(f.name));
+
+  if (nestedRars.length === 0) {
+    // لا يوجد nested RARs — الحالة العادية
+    return await filesToZipBuffer(regularFiles);
+  }
+
+  // ── يوجد nested RARs — نفكهم ونضيف محتوياتهم للملفات العادية ──
+  const allFiles = [...regularFiles];
+  for (const nested of nestedRars) {
+    try {
+      const nestedBuf = (nested.data.buffer)
+        ? nested.data.buffer.slice(nested.data.byteOffset, nested.data.byteOffset + nested.data.byteLength)
+        : nested.data;
+      const nestedZipBuf = await viaBuiltinRar(nestedBuf);
+      // نفتح الـ ZIP الناتج ونسحب منه الملفات
+      const nestedZip = await JSZip.loadAsync(nestedZipBuf);
+      const nestedBase = nested.name.replace(/\.rar$/i, "");
+      for (const e of Object.values(nestedZip.files)) {
+        if (e.dir) continue;
+        const data = await e.async("uint8array");
+        allFiles.push({ name: nestedBase + "/" + e.name, data });
+      }
+    } catch (err) {
+      console.warn("Failed to extract nested RAR:", nested.name, err);
+    }
+  }
+
+  return await filesToZipBuffer(allFiles);
 }
 
 /** Unified entrypoint */
@@ -2842,13 +2901,17 @@ className={`cursor-pointer transition ${
 const Toast = ({ toast }) => {
   if (!toast) return null;
   const tones = {
-    info:   "bg-slate-900 text-white",
-    ok:     "bg-emerald-600 text-white",
-    err:    "bg-rose-600 text-white",
+    info:   { background: "var(--panel)", color: "var(--ink)", border: "1px solid var(--line)" },
+    ok:     { background: "#059669",      color: "#ffffff" },
+    err:    { background: "#e11d48",      color: "#ffffff" },
+    warn:   { background: "#f59e0b",      color: "#ffffff" },
   };
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1100] toast">
-      <div className={`px-4 py-2.5 rounded-xl shadow-lg text-[13px] font-medium ${tones[toast.tone || 'info']}`}>
+      <div
+        className="px-4 py-2.5 rounded-xl shadow-lg text-[13px] font-medium"
+        style={tones[toast.tone || 'info']}
+      >
         {toast.msg}
       </div>
     </div>
@@ -4157,6 +4220,7 @@ useEffect(() => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [busy, setBusy] = useState(null);       // string label while a task runs
   const [toast, setToast] = useState(null);
+  const [lineWarnings, setLineWarnings] = useState([]); // أسماء طبقات LINE المحملة
   const [utmZone, setUtmZone] = useState(null); // 1..60
   const [utmHemi, setUtmHemi] = useState("N");  // 'N' | 'S'
   const [showNorthEdges, setShowNorthEdges] = useState(true);  // اتجاه البحري
@@ -4868,6 +4932,7 @@ const focusLayer = (id) => {
     if (globalNorthRef.current) globalNorthRef.current.clearLayers();
     moveHistoryRef.current = [];
     setMovedOpsCount(0);
+    setLineWarnings([]);
     showToast("تم مسح الخريطة", "ok");
   };
 
@@ -4995,6 +5060,16 @@ useEffect(() => {
     if (defs.length === 0) {
       showToast("تعذّر تحميل أي طبقة من الأرشيف — تحقق من محتوى الملف", "err", 5000);
       setBusy(null); return;
+    }
+
+    // ── تسجيل طبقات LINE للتحذير الدائم ──
+    const lineLayers = defs.filter(d => d.kind === "shapefile" && d.geomType === "LineString");
+    if (lineLayers.length > 0) {
+      const newLineNames = lineLayers.map(d => d.name);
+      setLineWarnings(prev => {
+        const combined = [...prev, ...newLineNames];
+        return [...new Set(combined)];
+      });
     }
 
     // ── إضافة الطبقات إلى الخريطة ──
@@ -5829,7 +5904,7 @@ hint="ارفع الشيب فايل والشيت معًا، أو ارفع أي م
   }}
   className={`shadow-md rounded-xl px-3 h-10 flex items-center gap-2 border transition-all duration-200 ${
     movePanelOpen || moveActive
-      ? "bg-[var(--ink)] border-[var(--ink)] text-[var(--bg)] hover:opacity-90"
+      ? "bg-[var(--accent)] border-[var(--accent)] text-white hover:opacity-90"
       : "bg-[var(--panel)] border-[var(--line)] text-[var(--ink)] hover:bg-[var(--panel-2)]"
   }`}
 title="تحريك الشيب فايل"
@@ -5837,7 +5912,7 @@ title="تحريك الشيب فايل"
   <span
     className={`grid place-items-center w-6 h-6 rounded-md shrink-0 transition ${
       movePanelOpen || moveActive
-        ? "bg-white/15 text-[var(--bg)]"
+        ? "bg-white/20 text-white"
         : "bg-[var(--ink)] text-[var(--bg)]"
     }`}
   >
@@ -5846,7 +5921,7 @@ title="تحريك الشيب فايل"
 
   <span
     className={`text-[13px] font-semibold hidden sm:inline whitespace-nowrap ${
-      movePanelOpen || moveActive ? "text-[var(--bg)]" : "text-[var(--ink)]"
+      movePanelOpen || moveActive ? "text-white" : "text-[var(--ink)]"
     }`}
   >
     {moveActive
@@ -5874,38 +5949,38 @@ title="تحريك الشيب فايل"
         {/* Drag-mode banner */}
         {moveActive && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[550] pointer-events-none">
-            <div className="bg-slate-900 text-white shadow-xl rounded-xl h-10 px-3 flex items-center gap-2 pointer-events-auto">
-              <span className="grid place-items-center w-6 h-6 rounded-md bg-white/10 shrink-0">
+            <div className="bg-[var(--panel)] text-[var(--ink)] border border-[var(--line)] shadow-xl rounded-xl h-10 px-3 flex items-center gap-2 pointer-events-auto">
+              <span className="grid place-items-center w-6 h-6 rounded-md bg-[var(--accent-soft)] text-[var(--accent-ink)] shrink-0">
                 <Icon name="move" size={13} />
               </span>
               <span className="text-[12.5px] font-medium whitespace-nowrap">
                 اسحب على الخريطة لتحريك {moveSelected.size} طبقة
               </span>
-              <span className="w-px h-5 bg-white/15 mx-1" aria-hidden="true"></span>
+              <span className="w-px h-5 bg-[var(--line)] mx-1" aria-hidden="true"></span>
               <button
                 onClick={undoLastMove}
                 disabled={movedOpsCount === 0}
-                className="h-7 px-2 rounded-md text-[11.5px] font-semibold text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
+                className="h-7 px-2 rounded-md text-[11.5px] font-semibold text-[var(--ink)] bg-[var(--line-2)] hover:bg-[var(--line)] disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1"
                 title="التراجع عن آخر تحريك"
               >
                 <Icon name="chevronUp" size={12} className="rotate-90" />
                 تراجع
                 {movedOpsCount > 0 && (
-                  <span className="font-mono text-[10px] bg-white/15 rounded px-1">{movedOpsCount}</span>
+                  <span className="font-mono text-[10px] bg-[var(--line)] rounded px-1">{movedOpsCount}</span>
                 )}
               </button>
               <button
                 onClick={resetAllMoves}
                 disabled={movedOpsCount === 0}
-                className="h-7 px-2 rounded-md text-[11.5px] font-semibold text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                className="h-7 px-2 rounded-md text-[11.5px] font-semibold text-[var(--ink)] bg-[var(--line-2)] hover:bg-[var(--line)] disabled:opacity-30 disabled:cursor-not-allowed transition"
                 title="إرجاع جميع الطبقات لأماكنها الأصلية"
               >
                 إرجاع للأصل
               </button>
-              <span className="w-px h-5 bg-white/15 mx-1" aria-hidden="true"></span>
+              <span className="w-px h-5 bg-[var(--line)] mx-1" aria-hidden="true"></span>
               <button
                 onClick={endMove}
-                className="bg-white text-slate-900 rounded-md px-2.5 h-7 text-[12px] font-semibold hover:bg-slate-100 transition"
+                className="bg-[var(--ink)] text-[var(--bg)] rounded-md px-2.5 h-7 text-[12px] font-semibold hover:opacity-90 transition"
               >
                 إنهاء
               </button>
@@ -5952,6 +6027,29 @@ title="تحريك الشيب فايل"
         )}
 
         <div ref={mapEl} className="absolute inset-0" />
+
+        {/* Persistent LINE warning bar — bottom center, same style as drag banner */}
+        {lineWarnings.length > 0 && (
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-[510] pointer-events-none">
+            <div className="bg-rose-600 text-white border border-rose-500 shadow-xl rounded-xl h-10 px-3 flex items-center gap-2 pointer-events-auto">
+              <span className="grid place-items-center w-6 h-6 rounded-md bg-white/20 text-white shrink-0">
+                <Icon name="warning" size={13} />
+              </span>
+              <span className="text-[12.5px] font-medium whitespace-nowrap">
+                {lineWarnings.length === 1
+                  ? <>تحذير: الطبقة <span className="font-mono font-bold">"{lineWarnings[0]}"</span> من نوع LINE</>
+                  : <>تحذير: {lineWarnings.length} طبقات من نوع LINE — <span className="font-mono font-bold">{lineWarnings.join("، ")}</span></>
+                }
+              </span>
+              <span className="w-px h-5 bg-white/30 mx-1" aria-hidden="true"></span>
+              <button
+                onClick={() => setLineWarnings([])}
+                className="h-7 px-2 rounded-md text-[11.5px] font-semibold text-white bg-white/20 hover:bg-white/35 transition"
+                title="إغلاق"
+              >إغلاق</button>
+            </div>
+          </div>
+        )}
 
         {/* Floating LAYERS tab — bottom-left */}
         <div className="absolute bottom-4 left-4 z-[500] w-[300px] max-w-[calc(100vw-2rem)] pointer-events-none">
