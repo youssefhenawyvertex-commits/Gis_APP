@@ -2168,7 +2168,9 @@ const m = L.circleMarker([lat, lon], {
   };
 }
 
-/** Walk a JSZip and collect by filetype. Returns { prjByBase, sheetEntries }. */
+/** Walk a JSZip and collect by filetype. Returns { prjByBase, sheetEntries, innerZipBuffers }.
+ *  Now handles nested RAR files inside ZIP/RAR archives — converts each inner RAR
+ *  to an in-memory ZIP then recurses into it, just like inner ZIPs. */
 async function indexArchive(zip, _depth) {
   _depth = _depth || 0;
   const MAX_DEPTH = 5;
@@ -2183,8 +2185,10 @@ async function indexArchive(zip, _depth) {
 
     if (ext === "prj") {
       prjByBase[base] = await e.async("string");
+
     } else if (["xlsx","xls","csv"].includes(ext)) {
       sheetEntries.push(e);
+
     } else if (ext === "zip" && _depth < MAX_DEPTH) {
       try {
         const innerBuf = await e.async("arraybuffer");
@@ -2196,6 +2200,23 @@ async function indexArchive(zip, _depth) {
         innerZipBuffers.push(...inner.innerZipBuffers);
       } catch (err) {
         console.warn("Failed to open nested ZIP:", e.name, err);
+      }
+
+    } else if (ext === "rar" && _depth < MAX_DEPTH) {
+      // ── RAR جوا ZIP أو RAR: نفكّه ونحوّله لـ ZIP ونكمل زي أي ZIP داخلي ──
+      try {
+        const rarBuf = await e.async("arraybuffer");
+        // فك الـ RAR الداخلي → ZIP buffer
+        const zipBuf = await viaBuiltinRar(rarBuf);
+        const innerZip = await JSZip.loadAsync(zipBuf);
+        const inner = await indexArchive(innerZip, _depth + 1);
+        Object.assign(prjByBase, inner.prjByBase);
+        sheetEntries.push(...inner.sheetEntries);
+        // أضف الـ ZIP المحوّل كمصدر للـ shpjs
+        innerZipBuffers.push({ name: base, buf: zipBuf });
+        innerZipBuffers.push(...inner.innerZipBuffers);
+      } catch (err) {
+        console.warn("Failed to open nested RAR:", e.name, err);
       }
     }
   }
@@ -5040,6 +5061,17 @@ useEffect(() => {
       .map(d => ({ name: d.name, crs: d.crs }));
     if (problematic.length > 0) {
       setCrsWarning({ items: problematic });
+    }
+
+    // ── تحذير طبقات LINE (خطوط) — نحذّر بس مش نمنع ──
+    const lineLayers = defs.filter(d => d.kind === "shapefile" && d.geomType === "LineString");
+    if (lineLayers.length > 0) {
+      const names = lineLayers.map(d => `"${d.name}"`).join(" ، ");
+      showToast(
+        `⚠️ تنبيه: ${lineLayers.length > 1 ? "الطبقات التالية تحتوي" : "الطبقة التالية تحتوي"} على خطوط (LINE): ${names}`,
+        "info",
+        7000
+      );
     }
 
     setBusy(null);
