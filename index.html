@@ -4693,7 +4693,26 @@ useEffect(() => {
 
       const best = candidates[0];
 
-      bringLeafletLayerToFront(best.featureLayer);
+      // ── لو الـ feature مضلع، ابعت مساحته للآلة الحاسبة دايماً (بغض النظر هي مفتوحة أو لأ) ──
+      try {
+        const feat = best.featureLayer.feature;
+        const ld   = best.layerDef;
+        if (feat) {
+          const g = feat.geometry;
+          if (g && (g.type === "Polygon" || g.type === "MultiPolygon")) {
+            const zone = ld.zone || null;
+            const hemi = ld.hemi || "N";
+            const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+            let areaSqm = 0;
+            for (const rings of polys) areaSqm += polygonAreaMeters(rings, zone, hemi);
+            // نبعت م² الخام دايماً — الآلة الحاسبة هي اللي تحوّل للوحدة المختارة
+            window.__gisCalcSendValue?.(areaSqm);
+            return; // لا تفتح البوب أب — المساحة اتبعتت للآلة
+          }
+        }
+      } catch (err) {
+        console.warn("Calc area pick failed:", err);
+      }
 
       const popup = best.featureLayer.getPopup?.();
 
@@ -4714,6 +4733,23 @@ useEffect(() => {
     delete window.__gisSmartPickFeature;
   };
 }, []);
+
+  // ── تسجيل window helpers للآلة الحاسبة ──
+  // نستخدم ref عشان map click handler يقرأ الوحدة الحالية دايماً بدون stale closure
+  const calcUnitRef = React.useRef(calcUnit);
+  React.useEffect(() => { calcUnitRef.current = calcUnit; }, [calcUnit]);
+
+  React.useEffect(() => {
+    window.__gisCalcOpen = calcOpen;
+    window.__gisCalcUnit = calcUnit;
+    window.__gisCalcGetUnit = () => calcUnitRef.current;
+    window.__gisCalcSendValue = (v) => setCalcPending(v);
+    return () => {
+      window.__gisCalcOpen = false;
+      delete window.__gisCalcSendValue;
+      delete window.__gisCalcGetUnit;
+    };
+  }, [calcOpen, calcUnit]);
 
   /* ----- Helpers for layers ----- */
   const nextColor = () => LAYER_COLORS[layers.length % LAYER_COLORS.length];
@@ -5197,6 +5233,11 @@ const loadMixedFiles = async (files) => {
     }
   };
 
+  /* ----- Calculator ----- */
+  const [calcOpen, setCalcOpen]   = useState(false);
+  const [calcUnit, setCalcUnit]   = useState(null);   // null = لسه مختارتش | "meter" | "feddan"
+  const [calcPending, setCalcPending] = useState(null); // رقم جاي من الخريطة
+
   /* ----- CAD image export (modal) ----- */
   const [cadOpen, setCadOpen] = useState(false);
 
@@ -5630,6 +5671,43 @@ downloadBlob(
                 style={{ right: showNorthEdges ? "2px" : "18px" }}
               ></span>
             </span>
+          </button>
+
+          {/* ── آلة الحاسبة ── */}
+          <button
+            onClick={() => {
+              if (!calcOpen) setCalcUnit("meter"); // default متر، تقدر تغيره من جوه الحاسبة
+              setCalcOpen(v => !v);
+            }}
+            className={`w-full rounded-xl border px-3 py-2.5 flex items-center gap-2.5 transition text-right ${
+              calcOpen
+                ? "bg-[var(--accent)] border-[var(--accent)] hover:opacity-90"
+                : "border-slate-200 bg-white hover:bg-slate-50"
+            }`}
+          >
+            <span className={`grid place-items-center w-8 h-8 rounded-lg shrink-0 ${calcOpen ? "bg-white/20 text-white" : "bg-slate-50 text-slate-700"}`}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="2" width="16" height="20" rx="2"/>
+                <line x1="8" y1="6" x2="16" y2="6"/>
+                <line x1="8" y1="14" x2="8" y2="14"/>
+                <line x1="12" y1="14" x2="12" y2="14"/>
+                <line x1="16" y1="14" x2="16" y2="14"/>
+                <line x1="8" y1="18" x2="8" y2="18"/>
+                <line x1="12" y1="18" x2="12" y2="18"/>
+                <line x1="16" y1="18" x2="16" y2="18"/>
+              </svg>
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className={`text-[12.5px] font-semibold leading-tight ${calcOpen ? "text-white" : "text-slate-900"}`}>آلة الحاسبة</div>
+              <div className={`text-[10.5px] mt-0.5 leading-tight ${calcOpen ? "text-white/70" : "text-slate-500"}`}>
+                {calcUnit === "feddan" ? "وحدة: فدان" : calcUnit === "meter" ? "وحدة: متر مربع" : "حساب المساحات"}
+              </div>
+            </div>
+            {calcOpen && (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+              </svg>
+            )}
           </button>
         </section>
 
@@ -6119,6 +6197,16 @@ title="تحريك الشيب فايل"
   onToggleFeatureVisibility={toggleFeatureVisibility}
 />
       )}
+
+      {/* ── CalculatorModal ── */}
+      <CalculatorModal
+        open={calcOpen && calcUnit !== null}
+        onClose={() => setCalcOpen(false)}
+        unit={calcUnit}
+        onUnitChange={(u) => setCalcUnit(u)}
+        pendingValue={calcPending}
+        onPendingConsumed={() => setCalcPending(null)}
+      />
     </div>
   );
 }
@@ -6128,6 +6216,318 @@ const SectionLabel = ({ children, className = "" }) => (
     {children}
   </div>
 );
+
+/* ══════════════════════════════════════════════════════════════════════════
+   آلة الحاسبة — CalculatorModal
+   ══════════════════════════════════════════════════════════════════════════ */
+function CalculatorModal({ open, onClose, onUnitChange, unit, pendingValue, onPendingConsumed }) {
+  // ── Dragging: نستخدم ref للـ position وننقل الـ DOM مباشرة بدون re-render ──
+  const wrapRef   = React.useRef(null);
+  const posRef    = React.useRef({ x: null, y: null });
+  const dragState = React.useRef(null); // { startMouseX, startMouseY, startElX, startElY }
+
+  // ── Calculator state ──
+  const [display, setDisplay] = React.useState("0");
+  const [expr,    setExpr]    = React.useState("");
+  const [waitOp,  setWaitOp]  = React.useState(false);
+  const [justEq,  setJustEq]  = React.useState(false);
+
+  // ── ضع الـ panel في المنتصف أول ما تفتح ──
+  React.useEffect(() => {
+    if (!open) return;
+    if (posRef.current.x !== null) return; // لو عنده position محفوظ خلّيه
+    const x = Math.max(20, window.innerWidth  / 2 - 155);
+    const y = Math.max(20, window.innerHeight / 2 - 250);
+    posRef.current = { x, y };
+    if (wrapRef.current) {
+      wrapRef.current.style.left = x + "px";
+      wrapRef.current.style.top  = y + "px";
+    }
+  }, [open]);
+
+  // ── Drag handlers (mouse + touch) — بيشتغلوا على DOM مباشرة بدون setState ──
+  const onDragStart = React.useCallback((clientX, clientY) => {
+    if (!wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    dragState.current = {
+      startMouseX: clientX, startMouseY: clientY,
+      startElX: rect.left,  startElY:  rect.top,
+    };
+
+    const onMove = (e) => {
+      const cx = e.touches ? e.touches[0].clientX : e.clientX;
+      const cy = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = cx - dragState.current.startMouseX;
+      const dy = cy - dragState.current.startMouseY;
+      const nx = dragState.current.startElX + dx;
+      const ny = dragState.current.startElY + dy;
+      posRef.current = { x: nx, y: ny };
+      if (wrapRef.current) {
+        wrapRef.current.style.left = nx + "px";
+        wrapRef.current.style.top  = ny + "px";
+        wrapRef.current.style.transform = "none";
+      }
+    };
+
+    const onUp = () => {
+      dragState.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend",  onUp);
+      if (wrapRef.current) wrapRef.current.style.cursor = "";
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend",  onUp);
+    if (wrapRef.current) wrapRef.current.style.cursor = "grabbing";
+  }, []);
+
+  // ── قيمة من الخريطة ──
+  React.useEffect(() => {
+    if (pendingValue == null) return;
+    // نحوّل القيمة (م² خام) للوحدة المختارة مع truncate بدون تقريب
+    const truncate = (n, d) => Math.trunc(n * Math.pow(10, d)) / Math.pow(10, d);
+    const converted = unit === "feddan"
+      ? truncate(Number(pendingValue) / 4200.83, 4)
+      : truncate(Number(pendingValue), 2);
+    const val = String(converted) || "0";
+
+    // دايماً نكتب الرقم الجديد بعد آخر عملية أو نستبدل الحالي
+    setDisplay(val);
+    setExpr(prev => {
+      const trimmed = prev.trimEnd();
+      if (/[+\-×÷−]$/.test(trimmed)) return trimmed + " " + val;
+      const m = trimmed.match(/^(.*[+\-×÷−]\s*)[\d.]+$/s);
+      if (m) return m[1] + val;
+      return val;
+    });
+    setWaitOp(false);
+    setJustEq(false);
+    onPendingConsumed?.();
+  }, [pendingValue]);
+
+  // ── Keyboard ──
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const k = e.key;
+      if (k >= "0" && k <= "9")              { e.preventDefault(); handleNum(k); }
+      else if (k === ".")                    { e.preventDefault(); handleDot(); }
+      else if (k === "+" || k === "-")       { e.preventDefault(); handleOp(k === "+" ? "+" : "−"); }
+      else if (k === "*")                    { e.preventDefault(); handleOp("×"); }
+      else if (k === "/")                    { e.preventDefault(); handleOp("÷"); }
+      else if (k === "Enter" || k === "=")   { e.preventDefault(); handleEquals(); }
+      else if (k === "Backspace")            { e.preventDefault(); handleBack(); }
+      else if (k === "Escape" || k === "c" || k === "C") { e.preventDefault(); handleClear(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, display, expr, waitOp, justEq]);
+
+  const M2_PER_FEDDAN = 4200.83;
+
+  const safeEval = (expression) => {
+    try {
+      const clean = expression.replace(/×/g,"*").replace(/÷/g,"/").replace(/−/g,"-");
+      // eslint-disable-next-line no-new-func
+      const r = Function('"use strict";return(' + clean + ')')();
+      return isFinite(r) ? r : null;
+    } catch { return null; }
+  };
+
+  const handleNum = (n) => {
+    if (justEq) {
+      setDisplay(n); setExpr(n); setJustEq(false); setWaitOp(false); return;
+    }
+    if (waitOp) {
+      setDisplay(n);
+      setExpr(prev => prev + " " + n);
+      setWaitOp(false); return;
+    }
+    const nd = display === "0" ? n : display + n;
+    setDisplay(nd);
+    setExpr(prev => {
+      const m = prev.trimEnd().match(/^(.*[+\-×÷−]\s*)[\d.]+$/s);
+      return m ? m[1] + nd : nd;
+    });
+  };
+
+  const handleDot = () => {
+    if (display.includes(".")) return;
+    if (waitOp || justEq) {
+      setDisplay("0."); setExpr(prev => justEq ? "0." : prev + " 0.");
+      setWaitOp(false); setJustEq(false); return;
+    }
+    const nd = display + ".";
+    setDisplay(nd);
+    setExpr(prev => {
+      const m = prev.trimEnd().match(/^(.*[+\-×÷−]\s*)[\d.]+$/s);
+      return m ? m[1] + nd : nd;
+    });
+  };
+
+  const handleOp = (op) => {
+    setJustEq(false); setWaitOp(true);
+    setExpr(prev => (prev.trim() || display) + " " + op);
+  };
+
+  const handleEquals = () => {
+    const r = safeEval(expr.trim() || display);
+    if (r === null) { setDisplay("خطأ"); setExpr(""); setWaitOp(false); setJustEq(false); return; }
+    const rs = Number.isInteger(r) ? String(r) : parseFloat(r.toFixed(8)).toString();
+    setDisplay(rs); setExpr(rs); setWaitOp(false); setJustEq(true);
+  };
+
+  const handleClear = () => { setDisplay("0"); setExpr(""); setWaitOp(false); setJustEq(false); };
+
+  const handleBack = () => {
+    if (justEq || waitOp) { handleClear(); return; }
+    if (display.length <= 1 || display === "خطأ") {
+      setDisplay("0");
+      setExpr(prev => { const m = prev.trimEnd().match(/^(.*[+\-×÷−]\s*)[\d.]+$/s); return m ? m[1].trimEnd() : ""; });
+      return;
+    }
+    const nd = display.slice(0,-1) || "0";
+    setDisplay(nd);
+    setExpr(prev => { const m = prev.trimEnd().match(/^(.*[+\-×÷−]\s*)[\d.]+$/s); return m ? m[1] + nd : nd; });
+  };
+
+  const counterDisplay = () => "—";
+
+  if (!open) return null;
+
+  // ── أول render: لو posRef فاضي نستخدم transform ──
+  const initStyle = posRef.current.x !== null
+    ? { left: posRef.current.x + "px", top: posRef.current.y + "px" }
+    : { left: "50%", top: "50%", transform: "translate(-50%,-50%)" };
+
+  const btnBase = "flex items-center justify-center rounded-xl text-[18px] font-semibold h-12 select-none transition-all duration-100 active:scale-95 cursor-pointer";
+  const numBtn  = "bg-[var(--panel)] hover:bg-[var(--panel-2)] border border-[var(--line)] text-[var(--ink)]";
+  const opBtn   = "bg-[var(--accent-soft)] hover:opacity-80 border border-[var(--line)] text-[var(--accent-ink)]";
+  const eqBtn   = "bg-[var(--accent)] hover:opacity-90 text-white border border-[var(--accent)]";
+  const clrBtn  = "bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500";
+  const backBtn = "bg-[var(--panel-2)] hover:bg-[var(--line)] border border-[var(--line)] text-[var(--ink-soft)]";
+
+  return (
+    <div ref={wrapRef} style={{ position:"fixed", zIndex:2000, minWidth:"310px", userSelect:"none", ...initStyle }}>
+      <div className="bg-[var(--panel)] border border-[var(--line)] rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* ── Header (draggable) ── */}
+        <div
+          className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--line)] select-none bg-[var(--panel-2)]"
+          style={{ cursor: "grab" }}
+          onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); onDragStart(e.clientX, e.clientY); }}
+          onTouchStart={(e) => { e.preventDefault(); onDragStart(e.touches[0].clientX, e.touches[0].clientY); }}
+        >
+          {/* أيقونة السحب */}
+          <span className="grid place-items-center w-7 h-7 rounded-lg bg-[var(--accent-soft)] text-[var(--accent-ink)] shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+              <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+              <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+            </svg>
+          </span>
+          <span className="flex-1 text-[13px] font-bold text-[var(--ink)]">آلة الحاسبة</span>
+
+          {/* وحدة القياس */}
+          <div className="flex items-center gap-0.5 bg-[var(--panel)] border border-[var(--line)] rounded-lg p-0.5" onMouseDown={e => e.stopPropagation()}>
+            <button onClick={() => onUnitChange("meter")}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${unit === "meter" ? "bg-[var(--accent)] text-white" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"}`}>م²</button>
+            <button onClick={() => onUnitChange("feddan")}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${unit === "feddan" ? "bg-[var(--accent)] text-white" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"}`}>فدان</button>
+          </div>
+
+          {/* زر الإغلاق */}
+          <button onMouseDown={e => e.stopPropagation()} onClick={onClose}
+            className="w-7 h-7 grid place-items-center rounded-lg hover:bg-[var(--line)] text-[var(--ink-soft)] transition">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* ── Display ── */}
+        <div className="px-3 pt-3 pb-2 space-y-0.5">
+          <div className="text-right font-mono text-[11px] text-[var(--ink-soft)] h-4 overflow-hidden truncate leading-4" dir="ltr">
+            {expr || "\u00a0"}
+          </div>
+          <div
+            className="text-right font-mono font-bold text-[var(--ink)] leading-tight overflow-hidden cursor-pointer select-all relative group"
+            dir="ltr"
+            style={{ fontSize: display.length > 12 ? "17px" : display.length > 8 ? "22px" : "28px" }}
+            onClick={() => {
+              try {
+                navigator.clipboard.writeText(display);
+              } catch {}
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              try {
+                navigator.clipboard.readText().then(txt => {
+                  const v = parseFloat(txt.replace(/,/g, ".").trim());
+                  if (isFinite(v)) {
+                    setDisplay(String(v));
+                    setExpr(String(v));
+                    setWaitOp(false);
+                    setJustEq(true);
+                  }
+                }).catch(() => {});
+              } catch {}
+            }}
+            title="اضغط للنسخ · كليك يمين للصق"
+          >
+            {display}
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition text-[9px] text-[var(--ink-soft)] font-normal pr-1">نسخ</span>
+          </div>
+          <div className="text-right text-[10.5px] text-[var(--ink-soft)] pt-0.5">
+            <span className="opacity-50">≈ </span>
+            <span className="font-mono">{counterDisplay()}</span>
+          </div>
+          {/* شريط التلميح */}
+          <div className={`flex items-center gap-1.5 rounded-lg px-2 py-1 mt-1 ${unit === "feddan" ? "bg-amber-500/10 border border-amber-500/20" : "bg-blue-500/10 border border-blue-500/20"}`}>
+            <svg width="9" height="9" viewBox="0 0 16 16" fill={unit === "feddan" ? "#f59e0b" : "#3b82f6"} className="shrink-0">
+              <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm1 8H7V7h2v5z"/>
+            </svg>
+            <span className={`text-[9.5px] font-medium ${unit === "feddan" ? "text-amber-600" : "text-blue-600"}`}>
+              اضغط على أي مضلع في الخريطة لسحب مساحته {unit === "feddan" ? "بالفدان" : "بالمتر المربع"} هنا تلقائياً
+            </span>
+          </div>
+        </div>
+
+        {/* ── Buttons ── */}
+        <div className="px-3 pb-3 grid grid-cols-4 gap-2">
+          <button onClick={handleClear}          className={`${btnBase} ${clrBtn} col-span-2 text-[14px]`}>مسح</button>
+          <button onClick={handleBack}           className={`${btnBase} ${backBtn}`}>⌫</button>
+          <button onClick={() => handleOp("÷")}  className={`${btnBase} ${opBtn}`}>÷</button>
+
+          <button onClick={() => handleNum("7")} className={`${btnBase} ${numBtn}`}>7</button>
+          <button onClick={() => handleNum("8")} className={`${btnBase} ${numBtn}`}>8</button>
+          <button onClick={() => handleNum("9")} className={`${btnBase} ${numBtn}`}>9</button>
+          <button onClick={() => handleOp("×")}  className={`${btnBase} ${opBtn}`}>×</button>
+
+          <button onClick={() => handleNum("4")} className={`${btnBase} ${numBtn}`}>4</button>
+          <button onClick={() => handleNum("5")} className={`${btnBase} ${numBtn}`}>5</button>
+          <button onClick={() => handleNum("6")} className={`${btnBase} ${numBtn}`}>6</button>
+          <button onClick={() => handleOp("−")}  className={`${btnBase} ${opBtn}`}>−</button>
+
+          <button onClick={() => handleNum("1")} className={`${btnBase} ${numBtn}`}>1</button>
+          <button onClick={() => handleNum("2")} className={`${btnBase} ${numBtn}`}>2</button>
+          <button onClick={() => handleNum("3")} className={`${btnBase} ${numBtn}`}>3</button>
+          <button onClick={() => handleOp("+")}  className={`${btnBase} ${opBtn}`}>+</button>
+
+          <button onClick={() => handleNum("0")} className={`${btnBase} ${numBtn} col-span-2`}>0</button>
+          <button onClick={handleDot}            className={`${btnBase} ${numBtn}`}>.</button>
+          <button onClick={handleEquals}         className={`${btnBase} ${eqBtn}`}>=</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 
