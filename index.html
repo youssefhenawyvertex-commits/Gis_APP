@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -4126,14 +4126,16 @@ const BingSatelliteLayer = L.TileLayer.extend({
 function createBaseMapLayer(type) {
   if (type === "esri") {
     return L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      {
-        maxNativeZoom: 19,
-        maxZoom: 28,
-        crossOrigin: true,
-        attribution: "@جميع  الحقوق محفوظه لدى حناوى و فوكس الحكيم",
-      }
-    );
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  {
+maxZoom: 28,
+maxNativeZoom: 19,
+    crossOrigin: true,
+    updateWhenZooming: false,
+    updateInterval: 0,
+    attribution: "@جميع الحقوق محفوظة لدى حناوى و فوكس الحكيم",
+  }
+);
   }
 
   if (type === "bing") {
