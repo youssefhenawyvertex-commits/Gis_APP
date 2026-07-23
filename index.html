@@ -4125,11 +4125,11 @@ const BingSatelliteLayer = L.TileLayer.extend({
 
 function createBaseMapLayer(type) {
   if (type === "esri") {
-    return L.tileLayer(
+return L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   {
-    maxNativeZoom: 19,
-    maxZoom: 22,
+    maxNativeZoom: 17,   // جرب 17 بدل 19
+    maxZoom: 30,
     crossOrigin: true,
     updateWhenZooming: false,
     updateInterval: 0,
