@@ -4128,8 +4128,8 @@ function createBaseMapLayer(type) {
     return L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   {
-maxZoom: 28,
-maxNativeZoom: 19,
+    maxNativeZoom: 19,
+    maxZoom: 22
     crossOrigin: true,
     updateWhenZooming: false,
     updateInterval: 0,
