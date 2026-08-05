@@ -2957,39 +2957,20 @@ function polyHatchSpacing(ring, dimMax) {
 const CADExportModal = ({ open, onClose, layers }) => {
   const svgRef = useRef(null);
   const [mode, setMode] = useState("label");
-  const [strokeScale, setStrokeScale] = useState(1.0);   // global stroke multiplier
+  const [strokeScale, setStrokeScale] = useState(1.0);
   const [hatchedIds, setHatchedIds] = useState(() => new Set());
-
-  /* labelItems: Map<polyId, { text, x, y, fontSize, rotation }>
-     x,y are in SVG user-space coords (same as the polygon coords).
-     They start at the polygon centroid and the user can drag them freely.   */
   const [labelItems, setLabelItems] = useState(() => new Map());
-
-  /* which label is being dragged right now */
-  const dragRef   = useRef(null);   // { id, startSvgX, startSvgY, startLabelX, startLabelY }
-  const wrapperRef = useRef(null);  // outer div for zoom/pan
-
-  /* which label is selected (shows resize handle) */
+  const dragRef   = useRef(null);
+  const wrapperRef = useRef(null);
   const [selectedLabel, setSelectedLabel] = useState(null);
-
-  /* ── Zoom / pan state ── */
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan]   = useState({ x: null, y: null }); // null = use vbX/vbY once computed
+  const [pan, setPan]   = useState({ x: null, y: null });
   const isPanning = useRef(false);
   const panStart  = useRef({ mx: 0, my: 0, px: 0, py: 0 });
-
-  /* ── Free-label counter — must be here (before early return) ── */
   const [nextLabelId, setNextLabelId] = useState(0);
-  /* ── Label size in screen pixels — user-controlled. Applies to ALL labels.
-         Per-label override is still possible via the ◢ drag handle.        ── */
   const [labelPx, setLabelPx] = useState(28);
-  /* ── Current label tool: null = select/idle, "write" = next canvas click adds a label ── */
   const [labelTool, setLabelTool] = useState(null);
-  /* ── Inline text editor that floats over the canvas at the click point.
-         Replaces window.prompt() so the user can SEE the label as they type,
-         right where it will be placed.                                    ── */
   const [inlineInput, setInlineInput] = useState(null);
-  // { svgX, svgY, screenX, screenY, value }
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -3033,7 +3014,6 @@ const CADExportModal = ({ open, onClose, layers }) => {
 
   const sceneCtxRef = useRef({ vbW: 1, vbH: 1 });
 
-  /* ── Slider يغير حجم كل الترميزات الموجودة فوراً ── */
   useEffect(() => {
     if (!open) return;
     setLabelItems(prev => {
@@ -3063,39 +3043,20 @@ const CADExportModal = ({ open, onClose, layers }) => {
   }));
 
   let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
-  projected.forEach(p => p.rings[0].forEach(([x, y]) => {
+  projected.forEach(p => p.rings.forEach(ring => ring.forEach(([x, y]) => {
     if (x < xmin) xmin = x; if (x > xmax) xmax = x;
     if (y < ymin) ymin = y; if (y > ymax) ymax = y;
-  }));
+  })));
   const w = (xmax - xmin) || 1, h = (ymax - ymin) || 1;
   const dimMax = Math.max(w, h);
-  const padSide = dimMax * 0.05, padTop = dimMax * 0.14, padBottom = dimMax * 0.05;
-  const vbX = xmin - padSide, vbY = ymin - padTop, vbW = w + 2 * padSide, vbH = h + padTop + padBottom;
+  const padding = dimMax * 0.07;
+  const vbX = xmin - padding, vbY = ymin - padding;
+  const vbW = w + padding * 2, vbH = h + padding * 2;
 
-  /* ── Stroke width: مبنية على vbW الفعلي مش dimMax
-     ده بيضمن إن كل البوليجونات إطارها ظاهر بغض النظر عن حجمها
-     نريد الخط يكون 0.15% من عرض الـ viewBox تقريباً                      ── */
   const strokeWidth = vbW * 0.0015;
+  const baseLabelFontSize = dimMax * 0.022;
 
-  /* ── Label font size: relative to viewBox but clamped per-polygon later  ── */
-  const baseLabelFontSize = dimMax * 0.022;  // default; user resizes per-label by dragging
-
-  /* ── Convert the user's labelPx slider value → SVG scene units.
-     We treat labelPx as a percentage of dimMax/10 so the label always
-     looks right relative to the drawing regardless of real-world scale.
-     labelPx=28 → fontSize ≈ 2.8% of dimMax  (readable on any plot size)
-     The user can fine-tune with the slider or the ◢ per-label handle.   ── */
-  const pxToScene = (px) => (px / 1000) * dimMax;
-
-  // Expose current viewBox dims to the labelPx → fontSize sync effect
-  // (which runs BEFORE this code path due to the early-return above).\n  sceneCtxRef.current.vbW = vbW;
   sceneCtxRef.current.vbH = vbH;
-
-
-
-
-
-  const naSize = dimMax * 0.055, naX = vbX + naSize * 1.4, naY = vbY + naSize * 1.7;
 
   const polyMeta = projected.map((p) => {
     const ring = p.rings[0];
@@ -3111,7 +3072,6 @@ const CADExportModal = ({ open, onClose, layers }) => {
       : [ring.reduce((s, c) => s + c[0], 0) / ring.length,
          ring.reduce((s, c) => s + c[1], 0) / ring.length];
 
-    /* Per-polygon bounding box */
     let pxmin = Infinity, pxmax = -Infinity, pymin = Infinity, pymax = -Infinity;
     ring.forEach(([x, y]) => {
       if (x < pxmin) pxmin = x; if (x > pxmax) pxmax = x;
@@ -3120,81 +3080,56 @@ const CADExportModal = ({ open, onClose, layers }) => {
     const polyW = pxmax - pxmin || dimMax * 0.01;
     const polyH = pymax - pymin || dimMax * 0.01;
     const polyDim = Math.max(polyW, polyH);
-
-    // Hatch spacing: ~8 lines across polygon, clamped
     const hatchSpacing = Math.min(Math.max(polyDim / 8, dimMax * 0.004), dimMax * 0.05);
-
-    // Font size: always at least dimMax*0.010 so tiny buildings (200–300 m²) still
-    // get a readable label in the exported PNG.  There is intentionally NO upper cap
-    // tied to the polygon's own dimensions — the label can be larger than the polygon
-    // (it will just sit centred on it) which is exactly what you want for small plots.
     const labelFontSize = Math.max(baseLabelFontSize, dimMax * 0.010);
-
-    /* Per-polygon stroke width = نفس الـ strokeWidth العام
-       ده بيضمن إن كل البوليجونات إطارها ظاهر بنفس السُمك */
     const polyStrokeWidth = strokeWidth;
 
     return { ...p, centroid, hatchSpacing, labelFontSize, polyStrokeWidth, polyDim };
   });
 
-  /* Sort polyMeta by descending area (polyDim proxy) so large polygons render first
-     and small buildings are always painted on top — regardless of layer order. */
   const polyMetaSorted = [...polyMeta].sort((a, b) => b.polyDim - a.polyDim);
-  // ── SVG preview normalization ──
-// مهم جدًا: بننقل إحداثيات UTM الكبيرة لإحداثيات محلية صغيرة
-// عشان المتصفح ما يعملش تقطيع في stroke عند الزوم.
-const cleanPreviewRing = (ring) => {
-  const eps = Math.max(dimMax * 1e-9, 0.001); // تقريبًا 1 مم أو حسب حجم الرسمة
-  const out = [];
 
-  for (const [x, y] of ring) {
-    const px = x - vbX;
-    const py = y - vbY;
-
-    const last = out[out.length - 1];
-    if (!last || Math.hypot(px - last[0], py - last[1]) > eps) {
-      out.push([px, py]);
+  const cleanPreviewRing = (ring) => {
+    const eps = Math.max(dimMax * 1e-9, 0.001);
+    const out = [];
+    for (const [x, y] of ring) {
+      const px = x - vbX;
+      const py = y - vbY;
+      const last = out[out.length - 1];
+      if (!last || Math.hypot(px - last[0], py - last[1]) > eps) {
+        out.push([px, py]);
+      }
     }
-  }
-
-  // لو آخر نقطة = أول نقطة، شيلها وخلي Z يقفل المسار
-  if (out.length > 2) {
-    const first = out[0];
-    const last = out[out.length - 1];
-    if (Math.hypot(first[0] - last[0], first[1] - last[1]) <= eps) {
-      out.pop();
+    if (out.length > 2) {
+      const first = out[0];
+      const last = out[out.length - 1];
+      if (Math.hypot(first[0] - last[0], first[1] - last[1]) <= eps) {
+        out.pop();
+      }
     }
-  }
+    return out;
+  };
 
-  return out;
-};
+  const ringToPath = (ring) => {
+    if (!ring || ring.length === 0) return "";
+    return ring
+      .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(3)} ${y.toFixed(3)}`)
+      .join(" ") + " Z";
+  };
 
-const ringToPath = (ring) => {
-  if (!ring || ring.length === 0) return "";
-  return ring
-    .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(3)} ${y.toFixed(3)}`)
-    .join(" ") + " Z";
-};
+  const polyMetaPreview = polyMetaSorted.map(p => ({
+    ...p,
+    rings: p.rings.map(cleanPreviewRing),
+    centroid: [p.centroid[0] - vbX, p.centroid[1] - vbY],
+  }));
 
-const polyMetaPreview = polyMetaSorted.map(p => ({
-  ...p,
-  rings: p.rings.map(cleanPreviewRing),
-  centroid: [p.centroid[0] - vbX, p.centroid[1] - vbY],
-}));
+  const previewVbX = pan.x == null ? 0 : pan.x - vbX;
+  const previewVbY = pan.y == null ? 0 : pan.y - vbY;
 
-const previewVbX = pan.x == null ? 0 : pan.x - vbX;
-const previewVbY = pan.y == null ? 0 : pan.y - vbY;
-
-const naXPreview = naX - vbX;
-const naYPreview = naY - vbY;
-
-  /* ── Hatch ── */
   const toggleHatch = (id) => setHatchedIds(s => {
     const next = new Set(s); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
 
-  /* ── Label: stored in FULL SCENE coords (same space as polygon rings).
-     sceneX/Y are stable — zoom/pan/export all use the same toX/toY.        ── */
   const addLabelAtPoint = (sceneX, sceneY, text) => {
     const v = (text ?? "").toString().trim();
     if (!v) return;
@@ -3208,7 +3143,6 @@ const naYPreview = naY - vbY;
     setSelectedLabel(id);
   };
 
-  /* ── Confirm / cancel inline editor ── */
   const commitInline = () => {
     if (!inlineInput) return;
     const v = inlineInput.value.trim();
@@ -3218,7 +3152,6 @@ const naYPreview = naY - vbY;
   const cancelInline = () => setInlineInput(null);
 
   const handlePolyClick = (poly) => {
-    // In label mode, clicks on polygons are ignored — handled by SVG canvas click
     if (mode === "hatch") toggleHatch(poly.id);
   };
 
@@ -3231,13 +3164,11 @@ const naYPreview = naY - vbY;
     }
     const svg = svgRef.current;
     if (!svg) return;
-    // ── حوّل نقطة الضغط لوحدات الـ SVG viewBox (preview space) عبر CTM ──
     const pt = svg.createSVGPoint();
     pt.x = e.clientX; pt.y = e.clientY;
     const ctm = svg.getScreenCTM();
     if (!ctm) return;
     const svgPt = pt.matrixTransform(ctm.inverse());
-    // svgPt.x/y = preview space (scene - vbX/vbY) → نضيف vbX/vbY للـ full scene
     const sceneX = svgPt.x + vbX;
     const sceneY = svgPt.y + vbY;
 
@@ -3254,19 +3185,6 @@ const naYPreview = naY - vbY;
     requestAnimationFrame(() => { try { inputRef.current?.focus(); } catch {} });
   };
 
-  /* ── SVG-space mouse coords helper ── */
-  const svgPoint = (e) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const pt = svg.createSVGPoint();    pt.x = e.clientX; pt.y = e.clientY;
-    const m = svg.getScreenCTM();
-    if (!m) return { x: 0, y: 0 };
-    const inv = m.inverse();
-    const tp = pt.matrixTransform(inv);
-    return { x: tp.x, y: tp.y };
-  };
-
-  /* ── Label drag — delta computed in SVG scene space via CTM ── */
   const onLabelMouseDown = (e, id) => {
     e.stopPropagation();
     const item = labelItems.get(id);
@@ -3305,7 +3223,6 @@ const naYPreview = naY - vbY;
     window.addEventListener("mouseup", onUp);
   };
 
-  /* ── Label font-size resize — changes fontPx directly ── */
   const onResizeMouseDown = (e, id) => {
     e.stopPropagation();
     const item = labelItems.get(id);
@@ -3313,7 +3230,7 @@ const naYPreview = naY - vbY;
     const startY = e.clientY, startPx = item.fontPx;
     const onMove = (ev) => {
       const dy = ev.clientY - startY;
-      const newPx = Math.max(8, startPx + dy);
+      const newPx = Math.max(4, startPx + (dy / zoom));
       setLabelItems(prev => {
         const next = new Map(prev);
         const cur = next.get(id);
@@ -3330,31 +3247,40 @@ const naYPreview = naY - vbY;
     window.addEventListener("mouseup", onUp);
   };
 
-  /* ── PNG export: بنبني SVG جديد من الـ data مباشرة لضمان الـ viewport الصحيح ── */
   const exportPNG = () => {
     if (polyMetaSorted.length === 0) return;
     setSelectedLabel(null);
 
-    // ── نرسم على Canvas 2D مباشرة — بدون SVG ──
     const W = 1000;
-    const H = Math.round(W * vbH / vbW);
+    const H = 1000;
+
+    const exportScale = Math.min(W / vbW, H / vbH);
+    const renderedW = vbW * exportScale;
+    const renderedH = vbH * exportScale;
+    
+    const exportOffsetX = (W - renderedW) / 2;
+    const exportOffsetY = (H - renderedH) / 2;
+
+    const toX = function (x) {
+      return exportOffsetX + (x - vbX) * exportScale;
+    };
+    const toY = function (y) {
+      return exportOffsetY + (y - vbY) * exportScale;
+    };
+
     const canvas = document.createElement('canvas');
-    canvas.width  = W;
+    canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    // دالة تحويل الـ coordinates من وحدات الـ scene للـ pixels
-    const toX = function(x) { return (x - vbX) / vbW * W; };
-    const toY = function(y) { return (y - vbY) / vbH * H; };
-
-    // خلفية بيضاء
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, W, H);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-    // stroke width بالـ pixels (2px ثابت * strokeScale)
     const strokePx = Math.max(2 * strokeScale, 1.5);
 
-    // دالة رسم ring على الـ ctx
     const drawRing = function(ring) {
       ctx.beginPath();
       for(var i=0;i<ring.length;i++){
@@ -3365,21 +3291,18 @@ const naYPreview = naY - vbY;
       ctx.closePath();
     };
 
-    // ── ارسم كل polygon ──
     polyMetaSorted.forEach(function(p) {
       var hasHatch = hatchedIds.has(p.id);
       var pat = HATCH_PATTERNS[p.layerPatternIdx] || HATCH_PATTERNS[0];
 
-      // 1) Fill أبيض دايماً الأول
       ctx.beginPath();
       drawRing(p.rings[0]);
       p.rings.slice(1).forEach(function(h){ drawRing(h); });
       ctx.fillStyle = '#ffffff';
       ctx.fill('evenodd');
 
-      // 2) تهشير لو محدد
       if (hasHatch) {
-        var sp = toX(vbX + p.hatchSpacing) - toX(vbX);
+        var sp = p.hatchSpacing * exportScale;
         sp = Math.max(sp, 4);
 
         var pxmin=Infinity,pxmax=-Infinity,pymin=Infinity,pymax=-Infinity;
@@ -3399,7 +3322,6 @@ const naYPreview = naY - vbY;
         ctx.clip('evenodd');
         ctx.strokeStyle='#000000';
         ctx.lineWidth=Math.max(1,strokePx*0.5);
-        // نرسم الخطوط بدون translate — نحسب إحداثيات كل خط يدوياً
         var cos=Math.cos(angle), sin=Math.sin(angle);
         for(var t=-diagLen;t<=diagLen;t+=sp){
           var x1=cx2+t*cos-diagLen*(-sin), y1=cy2+t*sin-diagLen*cos;
@@ -3409,7 +3331,6 @@ const naYPreview = naY - vbY;
         ctx.restore();
       }
 
-      // 3) Stroke الحدود
       ctx.beginPath();
       drawRing(p.rings[0]);
       ctx.strokeStyle='#000000';
@@ -3417,7 +3338,6 @@ const naYPreview = naY - vbY;
       ctx.lineJoin='round';
       ctx.stroke();
 
-      // 4) Holes
       p.rings.slice(1).forEach(function(h){
         ctx.beginPath(); drawRing(h);
         ctx.fillStyle='#ffffff'; ctx.fill();
@@ -3425,29 +3345,29 @@ const naYPreview = naY - vbY;
       });
     });
 
-    // ── ارسم الترميزات (labels) — sceneX/Y → canvas pixels via toX/toY ──
     if (labelItems.size > 0) {
       var svgEl2 = svgRef.current;
-      var svgW2 = svgEl2 ? svgEl2.getBoundingClientRect().width : 800;
+      var rect = svgEl2 ? svgEl2.getBoundingClientRect() : { width: 800, height: 600 };
+      var previewScaleBase = Math.min(rect.width / vbW, rect.height / vbH);
+      
       labelItems.forEach(function(item) {
         var cx3 = toX(item.sceneX);
         var cy3 = toY(item.sceneY);
-        var fs = Math.max(8, Math.round(item.fontPx / svgW2 * W));
+        var logicalFontSize = item.fontPx / previewScaleBase;
+        var fs = Math.max(8, Math.round(logicalFontSize * exportScale));
+        
         ctx.font = 'bold ' + fs + 'px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth   = fs * 0.25;
-        ctx.lineJoin    = 'round';
-        ctx.strokeText(item.text, cx3, cy3);
         ctx.fillStyle = '#000000';
         ctx.fillText(item.text, cx3, cy3);
       });
     }
 
-    // ── ارسم سهم الشمال ──
-    var nx = toX(naX), ny = toY(naY);
-    var ns = Math.min(W,H) * 0.045;
+    var ns = Math.min(W,H) * 0.045; 
+    var nx = 80;  
+    var ny = 120; 
+
     ctx.font = 'bold ' + Math.round(ns*0.55) + 'px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
@@ -3463,7 +3383,6 @@ const naYPreview = naY - vbY;
     ctx.fillStyle = '#000000';
     ctx.fill();
 
-    // ── حفظ كـ JPG ──
     canvas.toBlob(function(blob){
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -3494,7 +3413,6 @@ const naYPreview = naY - vbY;
             </div>
             {mode === "label" ? (
               <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 space-y-3">
-                {/* Tool toggle: write mode */}
                 <button
                   onClick={() => setLabelTool(t => t === "write" ? null : "write")}
                   className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition border ${
@@ -3506,7 +3424,6 @@ const naYPreview = naY - vbY;
                   <span className={`grid place-items-center w-8 h-8 rounded-lg shrink-0 ${
                     labelTool === "write" ? "bg-white/15" : "bg-[var(--panel-2)]"
                   }`}>
-                    {/* pencil icon */}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 20h9" />
                       <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
@@ -3521,7 +3438,6 @@ const naYPreview = naY - vbY;
                     </div>
                   </div>
                 </button>
-
                 <div className="text-[11px] text-[var(--ink-soft)] leading-relaxed">
                   بعد إضافة الترميز: اضغط عليه ليظهر مقبضا التحريك <span className="inline-block w-4 h-4 align-middle bg-blue-600 text-white rounded text-[9px] leading-4 text-center">✥</span> والحجم <span className="inline-block w-4 h-4 align-middle bg-blue-600 text-white rounded text-[9px] leading-4 text-center">◢</span>.<br/>
                   Enter للتأكيد · Esc للإلغاء.
@@ -3535,15 +3451,10 @@ const naYPreview = naY - vbY;
                     <button
                       onClick={() => setLabelPx(p => Math.max(4, p - 1))}
                       className="w-8 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base grid place-items-center shrink-0"
-                      aria-label="تصغير"
                     >−</button>
                     <div className="relative flex-1">
                       <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        step={1}
-                        value={labelPx}
+                        type="number" min={1} max={100} step={1} value={labelPx}
                         onChange={e => {
                           const v = parseInt(e.target.value, 10);
                           if (!Number.isNaN(v)) setLabelPx(Math.max(4, Math.min(400, v)));
@@ -3555,11 +3466,7 @@ const naYPreview = naY - vbY;
                     <button
                       onClick={() => setLabelPx(p => Math.min(400, p + 1))}
                       className="w-8 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base grid place-items-center shrink-0"
-                      aria-label="تكبير"
                     >+</button>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1 leading-tight">
-                    اكتب رقم الحجم بالـ px ليُطبّق على جميع الترميزات. لتعديل ترميز بعينه استخدم المقبض ◢.
                   </div>
                 </div>
                 <div>
@@ -3590,17 +3497,7 @@ const naYPreview = naY - vbY;
             </div>
           </aside>
           <main
-            ref={el => {
-              wrapperRef.current = el;
-              // أول مرة بيظهر الـ container، نعمل fit تلقائي
-              if (el && vbW && vbH && zoom === 1) {
-                const { width: cW, height: cH } = el.getBoundingClientRect();
-                if (cW && cH) {
-                  const fz = Math.min(cW / vbW, cH / vbH) * 0.92;
-                  if (fz > 0 && fz < 10) setTimeout(() => { setZoom(fz); setPan({ x: null, y: null }); }, 0);
-                }
-              }
-            }}
+            ref={el => { wrapperRef.current = el; }}
             className="bg-slate-100 p-4 min-h-0 overflow-hidden relative select-none flex items-center justify-center"
             style={{ cursor: isPanning.current ? "grabbing" : (mode === "label" && labelTool === "write" ? "crosshair" : "default") }}
             onWheel={e => {
@@ -3608,20 +3505,17 @@ const naYPreview = naY - vbY;
               const svg = svgRef.current;
               if (!svg) return;
               const rect = svg.getBoundingClientRect();
-              // Current viewBox (accounts for current zoom+pan)
               const curPanX = pan.x ?? vbX;
               const curPanY = pan.y ?? vbY;
               const curVbW  = vbW / zoom;
               const curVbH  = vbH / zoom;
-              // Mouse position in SVG user-space (using CURRENT viewBox scale)
               const mouseUX = curPanX + (e.clientX - rect.left) * (curVbW / rect.width);
               const mouseUY = curPanY + (e.clientY - rect.top)  * (curVbH / rect.height);
               const factor  = e.deltaY < 0 ? 1.15 : 1 / 1.15;
               const nz = Math.min(Math.max(zoom * factor, 0.5), 60);
-              // New pan: keep mouseU fixed → newPan = mouseU - mouseU_offset_in_new_viewBox
               const newVbW = vbW / nz;
               const newVbH = vbH / nz;
-              const fx = (e.clientX - rect.left) / rect.width;   // 0..1 within SVG element
+              const fx = (e.clientX - rect.left) / rect.width;
               const fy = (e.clientY - rect.top)  / rect.height;
               setZoom(nz);
               setPan({ x: mouseUX - fx * newVbW, y: mouseUY - fy * newVbH });
@@ -3632,7 +3526,6 @@ const naYPreview = naY - vbY;
                 isPanning.current = true;
                 const svg = svgRef.current;
                 const rect = svg ? svg.getBoundingClientRect() : { width: 1, height: 1 };
-                // Scale using CURRENT viewBox size (affected by zoom)
                 const scaleX = (vbW / zoom) / rect.width;
                 const scaleY = (vbH / zoom) / rect.height;
                 panStart.current = {
@@ -3652,18 +3545,19 @@ const naYPreview = naY - vbY;
             onMouseLeave={() => { isPanning.current = false; }}
             onContextMenu={e => e.preventDefault()}
           >
+            {/* North arrow container (fixed top-left) */}
+            <div className="absolute top-4 left-4 z-[20] pointer-events-none opacity-80">
+              <svg width="40" height="60" viewBox="0 0 40 60">
+                <text x="20" y="15" textAnchor="middle" fontSize="15" fontFamily="Arial, sans-serif" fontWeight="bold" fill="black">N</text>
+                <polygon points="20,18 8,50 20,40 32,50" fill="black" />
+              </svg>
+            </div>
+
             {/* Zoom controls */}
             <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
               <button onClick={() => { const cx = (pan.x??vbX)+(vbW/zoom)/2; const cy = (pan.y??vbY)+(vbH/zoom)/2; const nz=Math.min(zoom*1.25,60); setPan({x:cx-vbW/nz/2,y:cy-vbH/nz/2}); setZoom(nz); }}
                 className="w-8 h-8 bg-white border border-slate-200 rounded-lg shadow text-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center">+</button>
-              <button onClick={() => {
-                  const wrap = wrapperRef.current;
-                  if (wrap && vbW && vbH) {
-                    const { width: cW, height: cH } = wrap.getBoundingClientRect();
-                    if (cW && cH) { setZoom(Math.min(cW / vbW, cH / vbH) * 0.92); setPan({ x: null, y: null }); return; }
-                  }
-                  setZoom(1); setPan({ x: null, y: null });
-                }}
+              <button onClick={() => { setZoom(1); setPan({ x: null, y: null }); }}
                 className="w-8 h-8 bg-white border border-slate-200 rounded-lg shadow text-[10px] font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center">⌂</button>
               <button onClick={() => setZoom(z => Math.max(z/1.25,0.5))}
                 className="w-8 h-8 bg-white border border-slate-200 rounded-lg shadow text-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center">−</button>
@@ -3678,18 +3572,9 @@ const naYPreview = naY - vbY;
                 viewBox={`${previewVbX} ${previewVbY} ${vbW/zoom} ${vbH/zoom}`}
                 preserveAspectRatio="xMidYMid meet"
                 onClick={handleSvgClick}
-                style={{
-  background: "white",
-  width: "100%",
-  height: "100%",
-  overflow: "visible",
-  boxShadow: "0 8px 24px -10px rgba(15,23,42,0.25)",
-  cursor: mode === "label" ? "crosshair" : "default"
-}}>
+                style={{ background: "white", width: "100%", height: "100%", overflow: "visible", boxShadow: "0 8px 24px -10px rgba(15,23,42,0.25)", cursor: mode === "label" ? "crosshair" : "default" }}>
                 <defs>
-                  {/* Generate one hatch pattern per unique layer-pattern index actually used */}
                   {HATCH_PATTERNS.map((pat, idx) => {
-                    // Compute a reasonable representative spacing: median of polys on this layer
                     const layerPolys = polyMetaSorted.filter(p => p.layerPatternIdx === idx);
                     const sp = layerPolys.length > 0
                       ? layerPolys.map(p => p.hatchSpacing).sort((a,b)=>a-b)[Math.floor(layerPolys.length/2)]
@@ -3702,59 +3587,30 @@ const naYPreview = naY - vbY;
                     );
                   })}
                 </defs>
-{polyMetaPreview.map(p => {
-  const patId = `cadHatch${p.layerPatternIdx}`;
-  const fill = hatchedIds.has(p.id) ? `url(#${patId})` : "white";
-  const sw = Math.max(1.6 * strokeScale, 1.25);
-
-  return (
-    <g key={p.id}>
-      <path
-        d={ringToPath(p.rings[0])}
-        fill={fill}
-        stroke="black"
-        strokeWidth={sw}
-        vectorEffect="non-scaling-stroke"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        strokeMiterlimit="10"
-        shapeRendering="geometricPrecision"
-        style={{ cursor: mode === "hatch" ? "pointer" : "inherit" }}
-        onClick={e => {
-          if (mode === "hatch") {
-            e.stopPropagation();
-            handlePolyClick(p);
-          }
-        }}
-      />
-
-      {p.rings.slice(1).map((ring, ri) => (
-        <path
-          key={ri}
-          d={ringToPath(ring)}
-          fill="white"
-          stroke="black"
-          strokeWidth={sw}
-          vectorEffect="non-scaling-stroke"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          strokeMiterlimit="10"
-          shapeRendering="geometricPrecision"
-          pointerEvents="none"
-        />
-      ))}
-    </g>
-  );
-})}
-                {/* North arrow */}
-                <g transform={`translate(${naXPreview} ${naYPreview})`}>
-                  <text x="0" y={-naSize * 1.18} textAnchor="middle" dominantBaseline="alphabetic" fontSize={naSize * 0.55} fontFamily="Arial, sans-serif" fontWeight="bold" fill="black">N</text>
-                  <polygon points={`0,${-naSize} ${-naSize*0.42},${naSize*0.42} 0,${naSize*0.18} ${naSize*0.42},${naSize*0.42}`} fill="black" stroke="black" strokeWidth={strokeWidth} strokeLinejoin="round" />
-                </g>
+                {polyMetaPreview.map(p => {
+                  const patId = `cadHatch${p.layerPatternIdx}`;
+                  const fill = hatchedIds.has(p.id) ? `url(#${patId})` : "white";
+                  const sw = Math.max(1.6 * strokeScale, 1.25);
+                  return (
+                    <g key={p.id}>
+                      <path
+                        d={ringToPath(p.rings[0])}
+                        fill={fill}
+                        stroke="black"
+                        strokeWidth={sw}
+                        vectorEffect="non-scaling-stroke"
+                        strokeLinejoin="round" strokeLinecap="round" strokeMiterlimit="10" shapeRendering="geometricPrecision"
+                        style={{ cursor: mode === "hatch" ? "pointer" : "inherit" }}
+                        onClick={e => { if (mode === "hatch") { e.stopPropagation(); handlePolyClick(p); } }}
+                      />
+                      {p.rings.slice(1).map((ring, ri) => (
+                        <path key={ri} d={ringToPath(ring)} fill="white" stroke="black" strokeWidth={sw} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" strokeMiterlimit="10" shapeRendering="geometricPrecision" pointerEvents="none" />
+                      ))}
+                    </g>
+                  );
+                })}
               </svg>
             )}
-            {/* HTML label overlays — recomputed from sceneX/Y every render via CTM
-                so they stay pinned to the drawing regardless of zoom or pan.        */}
             {svgRef.current && (() => {
               const svg = svgRef.current;
               const ctm = svg.getScreenCTM();
@@ -3762,7 +3618,6 @@ const naYPreview = naY - vbY;
               if (!ctm || !wrapRect) return null;
               return [...labelItems.entries()].map(([id, item]) => {
                 const isSelected = selectedLabel === id;
-                // sceneX/Y → preview space (طرح vbX/vbY) → شاشة عبر CTM
                 const pt = svg.createSVGPoint();
                 pt.x = item.sceneX - vbX;
                 pt.y = item.sceneY - vbY;
@@ -3773,8 +3628,9 @@ const naYPreview = naY - vbY;
                   <div key={id} style={{
                     position:"absolute", left, top,
                     transform:"translate(-50%,-50%)",
-                    fontSize: item.fontPx, fontFamily:"Arial,sans-serif", fontWeight:"bold",
-                    color:"black", textShadow:"0 0 4px white,0 0 8px white",
+                    fontSize: item.fontPx * zoom, 
+                    fontFamily:"Arial,sans-serif", fontWeight:"bold",
+                    color:"black", textShadow:"none",
                     whiteSpace:"nowrap", cursor:"move", userSelect:"none",
                     outline: isSelected ? "2px dashed #2563eb" : "none",
                     padding:"2px 4px", lineHeight:1, zIndex:20,
@@ -3795,7 +3651,6 @@ const naYPreview = naY - vbY;
                 );
               });
             })()}
-            {/* Floating inline label editor */}
             {inlineInput && (() => {
               const wrect = wrapperRef.current?.getBoundingClientRect();
               const wrapW = wrect?.width || 0, wrapH = wrect?.height || 0;
