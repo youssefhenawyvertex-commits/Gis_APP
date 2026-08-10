@@ -1527,7 +1527,7 @@ function detectNorthEdgeIdx(ring) {
   return bestIdx;
 }
 
-/** HTML for a feature popup — Polygon → area (m² + feddan), Line → length, Point → coords. */
+/** HTML for a feature popup — Polygon → area (م² + feddan), Line → length, Point → coords. */
 function featureMetricsHtml(feature, zone, hemi) {
   const g = feature && feature.geometry;
   if (!g) return "";
@@ -4073,7 +4073,7 @@ return L.tileLayer(
     crossOrigin: true,
     updateWhenZooming: false,
     updateInterval: 0,
-    attribution: "@جميع الحقوق محفوظة لدى حناوى و فوكس الحكيم",
+        attribution: "@جميع  الحقوق محفوظه لدى حناوى و فوكس الحكيم و عمرو",
   }
 );
   }
@@ -4084,7 +4084,7 @@ return L.tileLayer(
       maxZoom: 28,
       subdomains: ["0", "1", "2", "3"],
       crossOrigin: true,
-        attribution: "@جميع  الحقوق محفوظه لدى حناوى و فوكس الحكيم",
+        attribution: "@جميع  الحقوق محفوظه لدى حناوى و فوكس الحكيم و عمرو",
     });
   }
 
@@ -4112,7 +4112,7 @@ return L.tileLayer(
     maxZoom: 28,
     crossOrigin: true,
     subdomains: ["0", "1", "2", "3"],
-        attribution: "@جميع  الحقوق محفوظه لدى حناوى و فوكس الحكيم",
+        attribution: "@جميع  الحقوق محفوظه لدى حناوى و فوكس الحكيم و عمرو",
   });
 }
 
@@ -4649,6 +4649,16 @@ useEffect(() => {
             const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
             let areaSqm = 0;
             for (const rings of polys) areaSqm += polygonAreaMeters(rings, zone, hemi);
+            // الوصف الذكي له أولوية أثناء وضع اختيار المساحة؛ وإلا نرسل للآلة الحاسبة.
+            if (window.__smartDescriptionPickArea) {
+              window.__smartDescriptionPickArea(areaSqm, {
+                layerDef: ld,
+                featureLayer: best.featureLayer,
+                feature: feat,
+                featureId: best.fid
+              });
+              return;
+            }
             // نبعت م² الخام دايماً — الآلة الحاسبة هي اللي تحوّل للوحدة المختارة
             window.__gisCalcSendValue?.(areaSqm);
             return; // لا تفتح البوب أب — المساحة اتبعتت للآلة
@@ -5182,6 +5192,16 @@ const loadMixedFiles = async (files) => {
   const [calcUnit, setCalcUnit]   = useState(null);   // null = لسه مختارتش | "meter" | "feddan"
   const [calcPending, setCalcPending] = useState(null); // رقم جاي من الخريطة
 
+  /* ----- Smart Description Generator ----- */
+  const [smartDescOpen, setSmartDescOpen] = useState(false);
+  const [smartDescType, setSmartDescType] = useState(null); // "land" | "building"
+  const [smartDescState, setSmartDescState] = useState({
+    landArea: null, landDescription: "", road: false, roadArea: null, showRoadArea: true,
+    divided: false, parts: [], occupations: [], requestedArea: null,
+    buildings: []
+  });
+  const smartDescPickRef = useRef(null);
+
   /* ----- CAD image export (modal) ----- */
   const [cadOpen, setCadOpen] = useState(false);
 
@@ -5652,6 +5672,29 @@ downloadBlob(
                 <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
               </svg>
             )}
+          </button>
+
+          {/* ── الوصف الذكي ── */}
+          <button
+            onClick={() => setSmartDescOpen(v => !v)}
+            className={`w-full rounded-xl border px-3 py-2.5 flex items-center gap-2.5 transition text-right ${
+              smartDescOpen
+                ? "bg-[var(--accent)] border-[var(--accent)] hover:opacity-90"
+                : "border-slate-200 bg-white hover:bg-slate-50"
+            }`}
+          >
+            <span className={`grid place-items-center w-8 h-8 rounded-lg shrink-0 ${smartDescOpen ? "bg-white/20 text-white" : "bg-slate-50 text-slate-700"}`}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z"/>
+                <path d="M8 8h8M8 12h5M8 16h7"/>
+                <path d="M16.5 15.5 19 18"/>
+              </svg>
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className={`text-[12.5px] font-semibold leading-tight ${smartDescOpen ? "text-white" : "text-slate-900"}`}>الوصف الذكي</div>
+              <div className={`text-[10.5px] mt-0.5 leading-tight ${smartDescOpen ? "text-white/70" : "text-slate-500"}`}>إنشاء وصف رسمي تلقائياً</div>
+            </div>
+            {smartDescOpen && <span className="text-white text-[13px]">×</span>}
           </button>
         </section>
 
@@ -6142,6 +6185,16 @@ title="تحريك الشيب فايل"
 />
       )}
 
+      <SmartDescriptionModal
+        open={smartDescOpen}
+        onClose={() => setSmartDescOpen(false)}
+        type={smartDescType}
+        onTypeChange={setSmartDescType}
+        state={smartDescState}
+        setState={setSmartDescState}
+        pickRef={smartDescPickRef}
+      />
+
       {/* ── CalculatorModal ── */}
       <CalculatorModal
         open={calcOpen && calcUnit !== null}
@@ -6160,6 +6213,408 @@ const SectionLabel = ({ children, className = "" }) => (
     {children}
   </div>
 );
+
+/* ══════════════════════════════════════════════════════════════════════════
+   الوصف الذكي — SmartDescriptionModal
+   ══════════════════════════════════════════════════════════════════════════ */
+function SmartDescriptionModal({ open, onClose, type, onTypeChange, state, setState, pickRef }) {
+  const wrapRef = React.useRef(null);
+  const posRef = React.useRef({ x: null, y: null });
+  const dragState = React.useRef(null);
+  const [pickMode, setPickMode] = React.useState(null);
+  const [copied, setCopied] = React.useState(false);
+
+  const M2_PER_FEDDAN = 4200.83;
+  const feddan = v => Number.isFinite(Number(v)) ? Number(v) / M2_PER_FEDDAN : null;
+  // تنسيق المساحات حسب المواصفة: نأخذ أول الخانات المطلوبة فقط من اليمين
+  // بعد العلامة العشرية — بدون Round وبدون أي تقريب.
+  // الأرض: أول 4 خانات عشرية. المتر: أول خانتين عشريتين.
+  const truncateDecimals = (value, decimals) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "";
+
+    const negative = n < 0;
+    const abs = Math.abs(n);
+    let str = String(abs);
+
+    // تحويل الصيغة العلمية إلى رقم عشري قبل القطع، حتى لا يحصل أي تقريب.
+    if (/e/i.test(str)) {
+      const [mantissa, exponentText] = str.toLowerCase().split("e");
+      const exponent = Number(exponentText);
+      let [intPart, fracPart = ""] = mantissa.split(".");
+      const digits = intPart + fracPart;
+      const decimalPos = intPart.length + exponent;
+      if (decimalPos <= 0) {
+        str = "0." + "0".repeat(-decimalPos) + digits;
+      } else if (decimalPos >= digits.length) {
+        str = digits + "0".repeat(decimalPos - digits.length);
+      } else {
+        str = digits.slice(0, decimalPos) + "." + digits.slice(decimalPos);
+      }
+    }
+
+    let [integerPart, fractionPart = ""] = str.split(".");
+    fractionPart = (fractionPart + "0".repeat(decimals)).slice(0, decimals);
+    return (negative ? "-" : "") + integerPart + (decimals ? "." + fractionPart : "");
+  };
+
+  // مهم: landArea / roadArea / part.area / requestedArea / buildingLand كلها
+  // مخزنة بالمتر المربع، لذلك التحويل إلى فدان يتم مرة واحدة فقط هنا.
+  const fmtF = v => v == null ? "" : truncateDecimals(feddan(v), 4);
+  const fmtM = v => v == null ? "" : truncateDecimals(v, 2);
+
+  React.useEffect(() => {
+    if (!open) return;
+    if (posRef.current.x !== null) return;
+    const x = Math.max(12, window.innerWidth / 2 - 245);
+    const y = Math.max(12, window.innerHeight / 2 - 300);
+    posRef.current = { x, y };
+    if (wrapRef.current) { wrapRef.current.style.left = x + "px"; wrapRef.current.style.top = y + "px"; }
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    window.__smartDescriptionPickArea = (areaSqm) => {
+      const mode = pickRef.current;
+      if (!mode) return;
+      setState(prev => {
+        const next = { ...prev };
+        if (mode === "landArea") next.landArea = areaSqm;
+        else if (mode === "roadArea") next.roadArea = areaSqm;
+        else if (mode === "requestedLand") next.requestedArea = areaSqm;
+        else if (mode === "part") {
+          next.parts = prev.parts.map(p => p.id === pickRef.currentId ? { ...p, area: areaSqm } : p);
+        } else if (mode === "occupation") {
+          next.occupations = prev.occupations.map(o => o.id === pickRef.currentId ? { ...o, area: areaSqm } : o);
+        } else if (mode === "partOcc") {
+          next.parts = prev.parts.map(p => ({
+            ...p, occupations: (p.occupations || []).map(o => o.id === pickRef.currentId ? { ...o, area: areaSqm } : o)
+          }));
+        } else if (mode === "requestedBuilding") {
+          next.requestedArea = areaSqm;
+        } else if (mode.startsWith("building:")) {
+          const id = mode.split(":")[1];
+          next.buildings = prev.buildings.map(b => b.id === id ? { ...b, area: areaSqm } : b);
+        } else if (mode.startsWith("buildingLand:")) {
+          const id = mode.split(":")[1];
+          next.buildings = prev.buildings.map(b => b.id === id ? { ...b, landArea: areaSqm } : b);
+        } else if (mode.startsWith("attachment:")) {
+          const [, bid, aid] = mode.split(":");
+          next.buildings = prev.buildings.map(b => b.id === bid ? {
+            ...b, attachments: (b.attachments || []).map(a => a.id === aid ? { ...a, area: areaSqm } : a)
+          } : b);
+        }
+        return next;
+      });
+      setPickMode(null);
+      pickRef.current = null;
+      pickRef.currentId = null;
+    };
+    return () => { delete window.__smartDescriptionPickArea; };
+  }, [open, setState, pickRef]);
+
+  React.useEffect(() => {
+    pickRef.current = pickMode;
+  }, [pickMode, pickRef]);
+
+  const startPick = (mode, id = null) => {
+    pickRef.current = mode;
+    pickRef.currentId = id;
+    setPickMode(mode);
+  };
+
+  const onDragStart = React.useCallback((clientX, clientY) => {
+    if (!wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    dragState.current = { startMouseX: clientX, startMouseY: clientY, startElX: rect.left, startElY: rect.top };
+    const onMove = e => {
+      const cx = e.touches ? e.touches[0].clientX : e.clientX;
+      const cy = e.touches ? e.touches[0].clientY : e.clientY;
+      const nx = dragState.current.startElX + cx - dragState.current.startMouseX;
+      const ny = dragState.current.startElY + cy - dragState.current.startMouseY;
+      posRef.current = { x: nx, y: ny };
+      if (wrapRef.current) { wrapRef.current.style.left = nx + "px"; wrapRef.current.style.top = ny + "px"; wrapRef.current.style.transform = "none"; }
+    };
+    const onUp = () => {
+      dragState.current = null;
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp);
+    };
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: false }); window.addEventListener("touchend", onUp);
+  }, []);
+
+  const reset = () => {
+    setPickMode(null); pickRef.current = null; pickRef.currentId = null;
+    setCopied(false);
+    setState({ landArea:null, landDescription:"", road:false, roadArea:null, showRoadArea:true, divided:false, parts:[], occupations:[], requestedArea:null, buildings:[] });
+  };
+
+  const descUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : "sd-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+  const nextDescSeq = p => {
+    const seqs = [
+      ...(p.parts || []).map(x => Number(x.seq) || 0),
+      ...(p.parts || []).flatMap(x => (x.occupations || []).map(o => Number(o.seq) || 0)),
+      ...(p.occupations || []).map(x => Number(x.seq) || 0),
+      ...(p.buildings || []).map(x => Number(x.seq) || 0),
+    ];
+    return Math.max(0, ...seqs) + 1;
+  };
+  const addPart = () => setState(p => ({ ...p, parts:[...p.parts, { id: descUid(), seq: nextDescSeq(p), area:null, description:"", occupations:[] }] }));
+  const removePart = id => setState(p => ({ ...p, parts:p.parts.filter(x=>x.id!==id) }));
+  const addPartOccupation = id => setState(p => ({ ...p, parts:p.parts.map(x => x.id===id ? {...x, occupations:[...(x.occupations||[]), {id:descUid(), seq:nextDescSeq(p), area:null, description:""}]} : x) }));
+  const removePartOccupation = (pid, oid) => setState(p => ({ ...p, parts:p.parts.map(x => x.id===pid ? {...x, occupations:(x.occupations||[]).filter(o=>o.id!==oid)} : x) }));
+
+  // الترميز في الأرض المقسمة تسلسلي واحد لكل العناصر: A ثم B ثم C...
+  // لا يوجد A1 أو B1 أو أي ترميز هرمي، ولا تتكرر أي علامة.
+  const alphaCode = index => {
+    let n = Number(index) || 0, out = "";
+    do { out = String.fromCharCode(65 + (n % 26)) + out; n = Math.floor(n / 26) - 1; } while (n >= 0);
+    return out;
+  };
+  const getDividedCodes = () => {
+    const entities = [];
+    (state.parts || []).forEach((p, pi) => {
+      entities.push({ key:`part:${p.id}`, seq:Number(p.seq) || 0, type:"part", partIndex:pi, partId:p.id });
+      // توافق مع البيانات القديمة: أي إشغال كان محفوظًا داخل الجزء يعامل كعنصر مستقل.
+      (p.occupations || []).forEach((o, oi) => entities.push({ key:`occ:${o.id}`, seq:Number(o.seq) || 0, type:"occupation", partIndex:pi, occIndex:oi, occId:o.id }));
+    });
+    // في الأرض المقسمة، الإشغالات الجديدة عناصر مستقلة في نفس مستوى الأجزاء.
+    (state.occupations || []).forEach((o, oi) => {
+      entities.push({ key:`globalOcc:${o.id}`, seq:Number(o.seq) || 0, type:"occupation", partIndex:999999, occIndex:oi, occId:o.id });
+    });
+    // التسلسل يعتمد على ترتيب الإضافة (seq)، والحرف لا يتكرر أبدًا.
+    entities.sort((a,b) => (a.seq-b.seq) || (a.type === b.type ? a.partIndex-b.partIndex : a.type === "part" ? -1 : 1) || ((a.occIndex||0)-(b.occIndex||0)));
+    const map = new Map();
+    entities.forEach((e,i) => map.set(e.key, alphaCode(i)));
+    return map;
+  };
+  const addOccupation = () => setState(p => ({ ...p, occupations:[...p.occupations,{id:descUid(),seq:nextDescSeq(p),area:null,description:""}] }));
+  const removeOccupation = id => setState(p => ({ ...p, occupations:p.occupations.filter(x=>x.id!==id) }));
+  const addBuilding = () => setState(p => ({ ...p, buildings:[...p.buildings,{id:descUid(),area:null,landArea:null,attachments:[]}] }));
+  const removeBuilding = id => setState(p => ({ ...p, buildings:p.buildings.filter(x=>x.id!==id) }));
+  const addAttachment = bid => setState(p => ({ ...p, buildings:p.buildings.map(b => b.id===bid ? {...b,attachments:[...(b.attachments||[]),{id:descUid(),type:"فناء",area:null}]} : b) }));
+  const removeAttachment = (bid, aid) => setState(p => ({ ...p, buildings:p.buildings.map(b => b.id===bid ? {...b,attachments:(b.attachments||[]).filter(a=>a.id!==aid)} : b) }));
+
+  const code = n => String.fromCharCode(65 + n);
+
+  // ترميز المباني والملحقات: مبنى واحد فقط بلا ملحقات = بدون ترميز.
+  // عند وجود ملحق أو مبنى آخر يبدأ الترميز من A ويستمر تسلسليًا على كل العناصر.
+  const buildingCodingActive = () => {
+    const total = (state.buildings || []).reduce((sum, b) => sum + 1 + ((b.attachments || []).length), 0);
+    return total > 1;
+  };
+  const getBuildingElementCodes = () => {
+    const map = new Map();
+    if (!buildingCodingActive()) return map;
+    let n = 0;
+    (state.buildings || []).forEach(b => {
+      map.set(`building:${b.id}`, code(n++));
+      (b.attachments || []).forEach(a => map.set(`attachment:${b.id}:${a.id}`, code(n++)));
+    });
+    return map;
+  };
+
+  const buildLandDescription = () => {
+    const lines=[];
+    if (state.landArea != null) {
+      const landDesc = (state.landDescription || "").trim();
+      lines.push(`أرض${landDesc ? ` ${landDesc}` : ""} بمساحة ${fmtF(state.landArea)} فدان`);
+    }
+    if (state.road) {
+      if (state.showRoadArea && state.roadArea != null) lines.push(`وبها طريق بمساحة ${fmtF(state.roadArea)} فدان`);
+      else lines.push("وبها طريق");
+    }
+    if (state.divided && state.parts.length) {
+      // الأرض المقسمة: كل أرض وإشغال يأخذ حرفًا واحدًا متسلسلًا حسب ترتيب الإضافة:
+      // أرض (A)، أرض (B)، مبني (C)... ولا نستخدم A1/B1 أو أي ترقيم هرمي.
+      const codes = getDividedCodes();
+      const entities = [];
+      state.parts.forEach((p,i) => {
+        entities.push({ type:"part", part:p, partIndex:i, seq:Number(p.seq) || 0 });
+        // دعم البيانات القديمة فقط؛ في الواجهة الجديدة الإشغالات تكون مستقلة أسفل الأجزاء.
+        (p.occupations || []).forEach((o,j) => entities.push({ type:"occupation", occupation:o, part:p, partIndex:i, occIndex:j, seq:Number(o.seq) || 0, legacyNested:true }));
+      });
+      (state.occupations || []).forEach((o,j) => {
+        entities.push({ type:"occupation", occupation:o, partIndex:999999, occIndex:j, seq:Number(o.seq) || 0, global:true });
+      });
+      entities.sort((a,b) => (a.seq-b.seq) || (a.type === b.type ? a.partIndex-b.partIndex : a.type === "part" ? -1 : 1) || ((a.occIndex||0)-(b.occIndex||0)));
+      entities.forEach(e => {
+        if (e.type === "part") {
+          const c = codes.get(`part:${e.part.id}`) || "A";
+          const d = (e.part.description || "").trim();
+          lines.push(`وبها أرض${d ? ` ${d}` : ""} (${c})${e.part.area != null ? ` بمساحة ${fmtF(e.part.area)} فدان` : ""}`.trim());
+        } else {
+          const c = e.global ? (codes.get(`globalOcc:${e.occupation.id}`) || "A") : (codes.get(`occ:${e.occupation.id}`) || "A");
+          const d = (e.occupation.description || "").trim();
+          const area = e.occupation.area != null ? ` بمساحة ${fmtM(e.occupation.area)} م²` : "";
+          lines.push(`وبها ${d ? `${d} ` : ""}(${c})${area}`.trim());
+        }
+      });
+    } else {
+      // الأرض غير المقسمة: الترميز يظل موجوداً في الوصف.
+      // مثال: "أرض بمساحة ... فدان، مقام عليها مبني (A) بمساحة ... م²"
+      state.occupations.forEach((o,i) => {
+        const desc = (o.description || "").trim();
+        const area = o.area != null ? ` بمساحة ${fmtM(o.area)} م²` : "";
+        const isBuilding = /^مبن[ىي]/u.test(desc);
+        const prefix = i === 0 ? (isBuilding ? "مقام عليها" : "وبها") : "وبها";
+        lines.push(`${prefix} ${desc ? `${desc} ` : ""}(${code(i)})${area}`.trim());
+      });
+    }
+    if (state.requestedArea != null) lines.push(`الجزء المراد تقنينه بمساحة ${fmtF(state.requestedArea)} فدان`);
+    if (state.road && state.roadArea != null && state.landArea != null) {
+      const net = state.landArea - state.roadArea;
+      if (net >= 0) lines.push(`صافي مساحة الأرض ${fmtF(net)} فدان`);
+    }
+    return lines.join("، ");
+  };
+
+  const buildBuildingDescription = () => {
+    const lines=[];
+    const codes = getBuildingElementCodes();
+    state.buildings.forEach((b) => {
+      const buildingCode = codes.get(`building:${b.id}`);
+      const buildingLabel = buildingCode ? `مبنى (${buildingCode})` : `مبنى`;
+      if (b.area != null) lines.push(`${buildingLabel} بمساحة ${fmtM(b.area)} م²`);
+      const atts=b.attachments||[];
+      if (atts.length) {
+        const first=atts[0];
+        const firstCode = codes.get(`attachment:${b.id}:${first.id}`);
+        const firstLabel = firstCode ? `${first.type} (${firstCode})` : first.type;
+        lines.push(`ملحق به ${firstLabel}${first.area!=null?` بمساحة ${fmtM(first.area)} م²`:''}`);
+        atts.slice(1).forEach(a=>{
+          const aCode = codes.get(`attachment:${b.id}:${a.id}`);
+          const aLabel = aCode ? `${a.type} (${aCode})` : a.type;
+          lines.push(`و${aLabel}${a.area!=null?` بمساحة ${fmtM(a.area)} م²`:''}`);
+        });
+      }
+    });
+    const land = state.buildings.find(b=>b.landArea!=null)?.landArea;
+    if (land != null) lines.push(`مقام على أرض بمساحة ${fmtM(land)} م²`);
+    if (state.requestedArea != null) lines.push(`الجزء المراد تقنينه بمساحة ${fmtM(state.requestedArea)} م²`);
+    return lines.join("، ");
+  };
+
+  const description = type === "land" ? buildLandDescription() : type === "building" ? buildBuildingDescription() : "";
+  const errors=[];
+  if (type === "land") {
+    if (state.landArea == null) errors.push("أدخل مساحة الأرض.");
+    if (state.road && state.roadArea == null) errors.push("أدخل مساحة الطريق.");
+    if (state.road && state.landArea != null && state.roadArea != null && state.roadArea > state.landArea) errors.push("مساحة الطريق لا يمكن أن تتجاوز مساحة الأرض.");
+    if (state.divided && !state.parts.length) errors.push("أضف جزءًا واحدًا على الأقل.");
+    if (state.divided && state.road && state.landArea != null && state.roadArea != null) {
+      const sum=state.parts.reduce((a,p)=>a+(Number(p.area)||0),0);
+      if (sum && Math.abs(sum-(state.landArea-state.roadArea))>0.5) errors.push("مجموع أجزاء الأرض لا يتوافق مع صافي مساحة الأرض بعد خصم الطريق.");
+    }
+  }
+  if (type === "building") {
+    if (!state.buildings.length) errors.push("أضف مبنى واحدًا على الأقل.");
+    if (state.buildings.some(b=>b.area==null)) errors.push("أكمل مساحة كل مبنى.");
+  }
+
+  const copyDescription = async () => {
+    if (!description || errors.length) return;
+    try { await navigator.clipboard.writeText(description); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch {}
+  };
+
+  const initStyle = posRef.current.x !== null ? {left:posRef.current.x+"px",top:posRef.current.y+"px"} : {left:"50%",top:"50%",transform:"translate(-50%,-50%)"};
+  const inputCls="w-full h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-2.5 text-[11.5px] text-[var(--ink)] outline-none focus:ring-2 focus:ring-[var(--accent)]/20";
+  const smallBtn="rounded-lg border border-[var(--line)] bg-[var(--panel)] hover:bg-[var(--panel-2)] px-2.5 py-2 text-[11px] font-semibold text-[var(--ink)] transition";
+  const pickBtn="rounded-lg bg-[var(--accent-soft)] hover:opacity-80 px-2.5 py-2 text-[11px] font-semibold text-[var(--accent-ink)] transition";
+  const panelSection="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-3 space-y-2.5";
+
+  // السحب من أي مكان في جسم النافذة، مع استثناء عناصر الإدخال والأزرار والقوائم حتى لا
+  // يتعارض السحب مع الاستخدام الطبيعي للواجهة.
+  const handlePanelMouseDown = React.useCallback((e) => {
+    if (e.button !== 0) return;
+    const target = e.target;
+    if (target?.closest?.("button, input, textarea, select, option, a, label")) return;
+    e.preventDefault();
+    onDragStart(e.clientX, e.clientY);
+  }, [onDragStart]);
+
+  const handlePanelTouchStart = React.useCallback((e) => {
+    const target = e.target;
+    if (target?.closest?.("button, input, textarea, select, option, a, label")) return;
+    e.preventDefault();
+    onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+  }, [onDragStart]);
+
+  // مهم: كل الـHooks يجب أن تُستدعى في نفس الترتيب في كل Render.
+  // لذلك لا نضع return مبكرًا قبل الـuseCallback أعلاه.
+  if (!open) return null;
+
+  return (
+    <div ref={wrapRef} style={{position:"fixed",zIndex:2100,width:"490px",maxWidth:"calc(100vw - 24px)",userSelect:"none",...initStyle}} onMouseDown={handlePanelMouseDown} onTouchStart={handlePanelTouchStart}>
+      <div className="bg-[var(--panel)] border border-[var(--line)] rounded-2xl shadow-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-3.5 py-3 border-b border-[var(--line)] bg-[var(--panel-2)]" style={{cursor:"move"}}>
+          <span className="grid place-items-center w-8 h-8 rounded-lg bg-[var(--accent-soft)] text-[var(--accent-ink)]">✦</span>
+          <div className="flex-1 min-w-0"><div className="text-[13px] font-bold text-[var(--ink)]">الوصف الذكي</div><div className="text-[10px] text-[var(--ink-soft)]">Land & Building Description Generator · V1.0</div></div>
+          {pickMode && <span className="text-[10px] font-semibold text-[var(--accent-ink)]">اضغط على الرسم في الخريطة</span>}
+          <button onMouseDown={e=>e.stopPropagation()} onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-[var(--line)] text-[var(--ink-soft)]">×</button>
+        </div>
+
+        <div className="max-h-[78vh] overflow-y-auto p-3 space-y-3 scroll-thin" dir="rtl">
+          {!type ? (
+            <div className="space-y-3">
+              <div className="text-[12px] font-semibold text-[var(--ink)]">اختار نوع الطلب</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={()=>onTypeChange("land")} className="group rounded-xl border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] p-4 text-right transition"><div className="text-xl mb-2">▱</div><div className="text-[13px] font-bold text-[var(--ink)]">أرض</div><div className="text-[10px] text-[var(--ink-soft)] mt-1">الوحدة الرسمية: فدان</div></button>
+                <button onClick={()=>onTypeChange("building")} className="group rounded-xl border border-[var(--line)] bg-[var(--panel-2)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] p-4 text-right transition"><div className="text-xl mb-2">⌂</div><div className="text-[13px] font-bold text-[var(--ink)]">مبنى</div><div className="text-[10px] text-[var(--ink-soft)] mt-1">الوحدة الرسمية: م²</div></button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <button onClick={()=>{setPickMode(null);pickRef.current=null;onTypeChange(null)}} className={smallBtn}>← تغيير النوع</button>
+                <div className="flex-1 text-[12px] font-bold text-[var(--ink)]">{type === "land" ? "بيانات الأرض" : "بيانات المباني"}</div>
+              </div>
+
+              {type === "land" ? <>
+                <div className={panelSection}>
+                  <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-[var(--ink)]">مساحة الأرض</span><span className="text-[10px] text-[var(--ink-soft)]">فدان · 4 أرقام عشرية</span></div>
+                  <div className="flex gap-2"><div className="flex-1 h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] flex items-center px-2.5 text-[12px] font-mono text-[var(--ink)]">{state.landArea!=null?fmtF(state.landArea):"—"}</div><button className={pickBtn} onClick={()=>startPick("landArea")}>اختيار من الخريطة</button></div>
+                </div>
+
+                <div className={panelSection}>
+                  <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-[var(--ink)]">وصف الأرض</span><span className="text-[10px] text-[var(--ink-soft)]">اختياري</span></div>
+                  <input className={inputCls} placeholder="مثال: مسورة / مزروعة / ميتة / فضاء" value={state.landDescription || ""} onChange={e=>setState(p=>({...p,landDescription:e.target.value}))}/>
+                  <div className="text-[10px] text-[var(--ink-soft)]">يظهر الوصف قبل كلمة «بمساحة» في الوصف النهائي.</div>
+                </div>
+
+                <div className={panelSection}>
+                  <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-[var(--ink)]">هل يوجد طريق؟</span><div className="flex gap-1"><button onClick={()=>setState(p=>({...p,road:true}))} className={`${smallBtn} ${state.road?"bg-[var(--accent)] text-white border-[var(--accent)]":""}`}>نعم</button><button onClick={()=>setState(p=>({...p,road:false,roadArea:null,showRoadArea:true}))} className={`${smallBtn} ${!state.road?"bg-[var(--accent)] text-white border-[var(--accent)]":""}`}>لا</button></div></div>
+                  {state.road && <><div className="flex gap-2"><div className="flex-1 h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] flex items-center px-2.5 text-[12px] font-mono text-[var(--ink)]">{state.roadArea!=null?fmtF(state.roadArea):"—"}</div><button className={pickBtn} onClick={()=>startPick("roadArea")}>مساحة الطريق من الخريطة</button></div><label className="flex items-center gap-2 text-[11px] text-[var(--ink-soft)]"><input type="checkbox" checked={state.showRoadArea} onChange={e=>setState(p=>({...p,showRoadArea:e.target.checked}))}/> إظهار مساحة الطريق داخل الوصف</label></>}
+                </div>
+
+                <div className={panelSection}>
+                  <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-[var(--ink)]">هل الأرض مقسمة؟</span><div className="flex gap-1"><button onClick={()=>setState(p=>({...p,divided:true}))} className={`${smallBtn} ${state.divided?"bg-[var(--accent)] text-white border-[var(--accent)]":""}`}>نعم</button><button onClick={()=>setState(p=>({...p,divided:false,parts:[]}))} className={`${smallBtn} ${!state.divided?"bg-[var(--accent)] text-white border-[var(--accent)]":""}`}>لا</button></div></div>
+                  {state.divided ? <div className="space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] text-[var(--ink-soft)]">الأجزاء والإشغالات · الترميز تلقائي ومتسلسل</span><div className="flex gap-1"><button className={smallBtn} onClick={addPart}>＋ إضافة أرض</button><button className={smallBtn} onClick={addOccupation}>＋ إضافة إشغال</button></div></div>{state.parts.map((p,i)=><div key={p.id} className="rounded-lg border border-[var(--line)] p-2.5 space-y-2"><div className="flex items-center gap-2"><span className="font-mono text-[11px] font-bold text-[var(--accent-ink)]">أرض ({getDividedCodes().get(`part:${p.id}`) || "A"})</span><button className="mr-auto text-[10px] text-rose-500" onClick={()=>removePart(p.id)}>حذف</button></div><div className="flex gap-2"><div className="flex-1 h-8 rounded-lg border border-[var(--line)] flex items-center px-2 text-[11px] font-mono">{p.area!=null?fmtF(p.area):"—"}</div><button className={pickBtn} onClick={()=>startPick("part",p.id)}>مساحة من الخريطة</button></div><input className={inputCls} placeholder="وصف الجزء: مزروعة / بور / فضاء…" value={p.description} onChange={e=>setState(q=>({...q,parts:q.parts.map(x=>x.id===p.id?{...x,description:e.target.value}:x)}))}/></div>)}{state.occupations.map((o,i)=><div key={o.id} className="rounded-lg border border-[var(--line)] p-2.5 space-y-2"><div className="flex items-center gap-2"><span className="font-mono text-[11px] font-bold text-[var(--accent-ink)]">إشغال ({getDividedCodes().get(`globalOcc:${o.id}`) || "A"})</span><button className="mr-auto text-[10px] text-rose-500" onClick={()=>removeOccupation(o.id)}>حذف</button></div><div className="flex gap-2"><div className="flex-1 h-8 rounded-lg border border-[var(--line)] flex items-center px-2 text-[11px] font-mono">{o.area!=null?fmtM(o.area)+" م²":"—"}</div><button className={pickBtn} onClick={()=>startPick("occupation",o.id)}>مساحة من الخريطة</button></div><input className={inputCls} placeholder="وصف الإشغال: مبني / مخزن / حوش…" value={o.description} onChange={e=>setState(q=>({...q,occupations:q.occupations.map(x=>x.id===o.id?{...x,description:e.target.value}:x)}))}/></div>)}</div> : <div className="space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] text-[var(--ink-soft)]">الإشغالات · الأرض غير مقسمة لا تأخذ رمزًا</span><button className={smallBtn} onClick={addOccupation}>＋ إضافة إشغال</button></div>{state.occupations.map((o,i)=><div key={o.id} className="flex gap-1.5 items-center"><div className="w-14 h-8 rounded-lg border border-[var(--line)] flex items-center justify-center text-[10px] font-mono">({code(i)})</div><input className={inputCls+" flex-1"} placeholder="وصف الإشغال" value={o.description} onChange={e=>setState(q=>({...q,occupations:q.occupations.map(x=>x.id===o.id?{...x,description:e.target.value}:x)}))}/><button className={pickBtn} onClick={()=>startPick("occupation",o.id)}>مساحة</button><button className="text-rose-500 px-1" onClick={()=>removeOccupation(o.id)}>×</button></div>)}</div>}
+                </div>
+
+                <div className={panelSection}><div className="text-[11px] font-semibold text-[var(--ink)]">الجزء المراد تقنينه</div><div className="flex gap-2"><div className="flex-1 h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] flex items-center px-2.5 text-[12px] font-mono">{state.requestedArea!=null?fmtF(state.requestedArea):"—"}</div><button className={pickBtn} onClick={()=>startPick("requestedLand")}>اختيار من الخريطة</button></div></div>
+              </> : <>
+                <div className={panelSection}><div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-[var(--ink)]">المباني</span><button className={smallBtn} onClick={addBuilding}>＋ إضافة مبنى</button></div>{state.buildings.map((b,i)=><div key={b.id} className="rounded-lg border border-[var(--line)] p-2.5 space-y-2"><div className="flex items-center"><span className="font-mono text-[11px] font-bold text-[var(--accent-ink)]">{getBuildingElementCodes().get(`building:${b.id}`) ? `مبنى (${getBuildingElementCodes().get(`building:${b.id}`)})` : "مبنى"}</span><button className="mr-auto text-[10px] text-rose-500" onClick={()=>removeBuilding(b.id)}>حذف</button></div><div className="flex gap-2"><div className="flex-1 h-8 rounded-lg border border-[var(--line)] flex items-center px-2 text-[11px] font-mono">{b.area!=null?fmtM(b.area):"—"}</div><button className={pickBtn} onClick={()=>startPick(`building:${b.id}`)}>مساحة المبنى من الخريطة</button></div><div className="flex items-center justify-between"><span className="text-[10px] text-[var(--ink-soft)]">الملحقات</span><button className={smallBtn} onClick={()=>addAttachment(b.id)}>＋ إضافة ملحق</button></div>{(b.attachments||[]).map((a,j)=><div key={a.id} className="flex gap-1.5 items-center"><select className={inputCls+" flex-1"} value={a.type} onChange={e=>setState(q=>({...q,buildings:q.buildings.map(x=>x.id===b.id?{...x,attachments:x.attachments.map(y=>y.id===a.id?{...y,type:e.target.value}:y)}:x)}))}><option>فناء</option><option>حوش</option><option>مخزن</option><option>حظيرة</option></select><button className={pickBtn} onClick={()=>startPick(`attachment:${b.id}:${a.id}`)}>{a.area!=null?fmtM(a.area)+" م²":"مساحة"}</button><button className="text-rose-500 px-1" onClick={()=>removeAttachment(b.id,a.id)}>×</button></div>)}</div>)}</div>
+                <div className={panelSection}><div className="text-[11px] font-semibold text-[var(--ink)]">مساحة الأرض المقام عليها</div>{state.buildings.length ? <div className="flex gap-2"><div className="flex-1 h-9 rounded-lg border border-[var(--line)] flex items-center px-2.5 text-[11px] font-mono">{state.buildings[0].landArea!=null?fmtM(state.buildings[0].landArea)+" م²":"—"}</div><button className={pickBtn} onClick={()=>startPick(`buildingLand:${state.buildings[0].id}`)}>اختيار من الخريطة</button></div>:<div className="text-[10px] text-[var(--ink-soft)]">أضف مبنى أولاً.</div>}</div>
+                <div className={panelSection}><div className="text-[11px] font-semibold text-[var(--ink)]">الجزء المراد تقنينه</div><div className="flex gap-2"><div className="flex-1 h-9 rounded-lg border border-[var(--line)] flex items-center px-2.5 text-[11px] font-mono">{state.requestedArea!=null?fmtM(state.requestedArea)+" م²":"—"}</div><button className={pickBtn} onClick={()=>startPick("requestedBuilding")}>اختيار من الخريطة</button></div></div>
+              </>}
+
+              {pickMode && <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-[10.5px] text-[var(--accent-ink)]">وضع الاختيار مفعل — اضغط على المساحة المطلوبة داخل الخريطة.</div>}
+
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] overflow-hidden">
+                <div className="px-3 py-2.5 border-b border-[var(--line)] flex items-center gap-2"><span className="text-[12px] font-bold text-[var(--ink)]">الوصف النهائي</span><button onClick={copyDescription} disabled={!description || errors.length>0} className="mr-auto rounded-lg bg-[var(--accent)] disabled:opacity-40 text-white px-3 py-1.5 text-[10.5px] font-semibold">{copied?"تم النسخ ✓":"نسخ الوصف"}</button></div>
+                <div className="p-3 text-[12px] leading-7 text-[var(--ink)] min-h-[80px] select-text">{description || <span className="text-[var(--ink-soft)]">أكمل البيانات الأساسية ليظهر الوصف تلقائياً.</span>}</div>
+              </div>
+              {errors.length>0 && <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 space-y-1"><div className="text-[11px] font-bold text-rose-500">مراجعة البيانات</div>{errors.map((e,i)=><div key={i} className="text-[10.5px] text-rose-500">• {e}</div>)}</div>}
+              <button onClick={reset} className="w-full rounded-xl border border-[var(--line)] hover:bg-[var(--panel-2)] py-2 text-[11px] font-semibold text-[var(--ink-soft)]">مسح وبدء وصف جديد</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    آلة الحاسبة — CalculatorModal
@@ -6232,11 +6687,10 @@ function CalculatorModal({ open, onClose, onUnitChange, unit, pendingValue, onPe
   // ── قيمة من الخريطة ──
   React.useEffect(() => {
     if (pendingValue == null) return;
-    // نحوّل القيمة (م² خام) للوحدة المختارة مع truncate بدون تقريب
-    const truncate = (n, d) => Math.trunc(n * Math.pow(10, d)) / Math.pow(10, d);
+    // نعرض القيمة كاملة بدون تقريب أو قطع لأي أرقام عشرية.
     const converted = unit === "feddan"
-      ? truncate(Number(pendingValue) / 4200.83, 4)
-      : truncate(Number(pendingValue), 2);
+      ? Number(pendingValue) / 4200.83
+      : Number(pendingValue);
     const val = String(converted) || "0";
 
     // دايماً نكتب الرقم الجديد بعد آخر عملية أو نستبدل الحالي
