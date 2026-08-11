@@ -6684,14 +6684,52 @@ function CalculatorModal({ open, onClose, onUnitChange, unit, pendingValue, onPe
     if (wrapRef.current) wrapRef.current.style.cursor = "grabbing";
   }, []);
 
+  // ── تنسيق نتيجة الآلة الحاسبة ──
+  // المتر المربع: خانتان عشريتان فقط.
+  // الفدان: أربع خانات عشرية فقط.
+  // يتم القطع بدون تقريب (Truncate).
+  const formatCalcValue = (value, decimals) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "0";
+
+    const negative = n < 0;
+    const abs = Math.abs(n);
+    let str = String(abs);
+
+    // تحويل الصيغة العلمية إلى رقم عشري قبل القطع.
+    if (/e/i.test(str)) {
+      const [mantissa, exponentText] = str.toLowerCase().split("e");
+      const exponent = Number(exponentText);
+      let [intPart, fracPart = ""] = mantissa.split(".");
+      const digits = intPart + fracPart;
+      const decimalPos = intPart.length + exponent;
+
+      if (decimalPos <= 0) {
+        str = "0." + "0".repeat(-decimalPos) + digits;
+      } else if (decimalPos >= digits.length) {
+        str = digits + "0".repeat(decimalPos - digits.length);
+      } else {
+        str = digits.slice(0, decimalPos) + "." + digits.slice(decimalPos);
+      }
+    }
+
+    let [integerPart, fractionPart = ""] = str.split(".");
+    fractionPart = (fractionPart + "0".repeat(decimals)).slice(0, decimals);
+
+    return (negative ? "-" : "") + integerPart + "." + fractionPart;
+  };
+
+  const getDisplayDecimals = () => unit === "feddan" ? 4 : 2;
+
   // ── قيمة من الخريطة ──
   React.useEffect(() => {
     if (pendingValue == null) return;
-    // نعرض القيمة كاملة بدون تقريب أو قطع لأي أرقام عشرية.
+
     const converted = unit === "feddan"
       ? Number(pendingValue) / 4200.83
       : Number(pendingValue);
-    const val = String(converted) || "0";
+
+    const val = formatCalcValue(converted, getDisplayDecimals());
 
     // دايماً نكتب الرقم الجديد بعد آخر عملية أو نستبدل الحالي
     setDisplay(val);
@@ -6777,7 +6815,9 @@ function CalculatorModal({ open, onClose, onUnitChange, unit, pendingValue, onPe
   const handleEquals = () => {
     const r = safeEval(expr.trim() || display);
     if (r === null) { setDisplay("خطأ"); setExpr(""); setWaitOp(false); setJustEq(false); return; }
-    const rs = Number.isInteger(r) ? String(r) : parseFloat(r.toFixed(8)).toString();
+
+    // عرض النتيجة حسب الوحدة: م² = خانتان، فدان = أربع خانات، بدون تقريب.
+    const rs = formatCalcValue(r, getDisplayDecimals());
     setDisplay(rs); setExpr(rs); setWaitOp(false); setJustEq(true);
   };
 
