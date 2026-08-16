@@ -2644,7 +2644,7 @@ const LayerRow = ({ layer, onToggle, onDelete, onFocus, onOpenTable }) => {
    ATTRIBUTE TABLE MODAL — QGIS-style table of feature properties for a
    shapefile layer. Click a row to focus / highlight the feature on the map.
    ────────────────────────────────────────────────────────────────────────── */
-const AttributeTableModal = ({ layer, onClose, onZoomFeature, onToggleFeatureVisibility }) => {
+const AttributeTableModal = ({ layer, onClose, onZoomFeature, onToggleFeatureVisibility, onDeleteFeature }) => {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
@@ -2923,21 +2923,36 @@ const AttributeTableModal = ({ layer, onClose, onZoomFeature, onToggleFeatureVis
                     </td>
 
                     <td className="text-center px-2 py-1.5 border-b border-[var(--line-2)]">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleFeatureVisibility?.(layer.id, r.featureId);
-                        }}
-                        className={`grid place-items-center w-7 h-7 rounded-md mx-auto transition ${
-                          r.hidden
-                            ? "bg-[var(--panel-2)] text-[var(--muted)] hover:bg-[var(--line)]"
-                            : "text-[var(--ink-soft)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-ink)]"
-                        }`}
-                        title={r.hidden ? "إظهار هذا الجزء على الخريطة" : "إخفاء هذا الجزء من الخريطة"}
-                      >
-                        <Icon name={r.hidden ? "eyeOff" : "eye"} size={14} />
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFeatureVisibility?.(layer.id, r.featureId);
+                          }}
+                          className={`grid place-items-center w-7 h-7 rounded-md transition ${
+                            r.hidden
+                              ? "bg-[var(--panel-2)] text-[var(--muted)] hover:bg-[var(--line)]"
+                              : "text-[var(--ink-soft)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-ink)]"
+                          }`}
+                          title={r.hidden ? "إظهار هذا الجزء على الخريطة" : "إخفاء هذا الجزء من الخريطة"}
+                        >
+                          <Icon name={r.hidden ? "eyeOff" : "eye"} size={14} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteFeature?.(layer.id, r.featureId);
+                          }}
+                          className="grid place-items-center w-7 h-7 rounded-md text-[var(--ink-soft)] hover:bg-red-50 hover:text-red-600 transition"
+                          title="حذف هذا الجزء من الطبقة"
+                          aria-label="حذف هذا الجزء من الطبقة"
+                        >
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </div>
                     </td>
 
                     {columns.length === 0 ? (
@@ -4894,6 +4909,57 @@ return updated;
   });
 };
 
+  const deleteFeature = (layerId, featureId) => {
+    const fid = String(featureId);
+
+    if (!window.confirm("هل تريد حذف هذا الجزء نهائيًا من الطبقة؟")) return;
+
+    setLayers(prev => {
+      const updated = prev.map(l => {
+        if (l.id !== layerId || l.kind !== "shapefile") return l;
+
+        const featureLayer = l.featureLayers?.get?.(fid);
+        if (featureLayer && l.geoLayer?.hasLayer(featureLayer)) {
+          l.geoLayer.removeLayer(featureLayer);
+        }
+
+        // احذف الـ feature من بيانات الـ GeoJSON نفسها حتى يختفي من Attribute Table
+        const nextGeojson = (l.geojson || []).map(fc => ({
+          ...fc,
+          features: (fc.features || []).filter(f => String(f.__featureId) !== fid),
+        }));
+
+        const nextFeatureLayers = new Map(l.featureLayers || []);
+        nextFeatureLayers.delete(fid);
+
+        const nextHidden = new Set(l.hiddenFeatureIds || []);
+        nextHidden.delete(fid);
+
+        const nextPolysData = (l.polysData || []).filter(
+          p => String(p.featureId) !== fid
+        );
+
+        const nextCount = nextGeojson.reduce(
+          (sum, fc) => sum + (fc.features || []).length,
+          0
+        );
+
+        return {
+          ...l,
+          geojson: nextGeojson,
+          featureLayers: nextFeatureLayers,
+          hiddenFeatureIds: nextHidden,
+          polysData: nextPolysData,
+          count: nextCount,
+        };
+      });
+
+      rebuildGlobalNorth(updated, showNorthEdges);
+      requestAnimationFrame(() => syncLayerStackOrder(updated));
+      return updated;
+    });
+  };
+
   const deleteLayer = (id) => {
     setLayers(prev => {
       const found = prev.find(l => l.id === id);
@@ -6182,6 +6248,7 @@ title="تحريك الشيب فايل"
   onClose={() => setAttrLayerId(null)}
   onZoomFeature={zoomToFeatureCentroid}
   onToggleFeatureVisibility={toggleFeatureVisibility}
+  onDeleteFeature={deleteFeature}
 />
       )}
 
