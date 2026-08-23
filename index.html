@@ -465,6 +465,9 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
     }
   </script>
 
+  <!-- Supabase JS — مطلوب فقط لميزة "📋 طلباتي" (نفس مشروع/بيانات جدول system_review1) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- React + Babel -->
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
@@ -4131,6 +4134,670 @@ return L.tileLayer(
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   📋 طلباتي — MY ORDERS FEATURE
+   ميزة مستقلة تمامًا (Supabase client خاص بيها + منطقها) لا تؤثر على باقي
+   الموقع. تتصل بنفس مشروع Supabase وجدول system_review1 المستخدمين في
+   ملف script.js الأصلي، وتستخدم بالضبط نفس أسماء الأعمدة وقيم الحالة
+   (review_status: مقبول / مرفوض / معلق) وrejection_reason.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// نفس بيانات الاتصال وجدول المراجعة الموجودين في script.js — بدون أي تغيير.
+const MYORDERS_SUPABASE_URL = 'https://gnpejzuxwqftxgfcsics.supabase.co';
+const MYORDERS_SUPABASE_ANON_KEY = 'sb_publishable_RZz9pDGfJXNtZYc7wADlHg_uMffms_6';
+const MYORDERS_TABLE_NAME = 'system_review1';
+
+// نفس قيم الحالة الحقيقية المستخدمة في script.js — لا تُخترع قيم جديدة.
+const MYORDERS_STATUS_ACCEPTED = 'مقبول';
+const MYORDERS_STATUS_REJECTED = 'مرفوض';
+const MYORDERS_STATUS_PENDING  = 'معلق';
+const MYORDERS_REASON_STATUSES = [MYORDERS_STATUS_REJECTED, MYORDERS_STATUS_PENDING];
+
+// Client واحد فقط لهذه الميزة، يُنشأ مرة واحدة (نفس نمط script.js: لا تكرار للاتصال).
+let myOrdersSupabaseClient = null;
+function getMyOrdersSupabaseClient() {
+  if (!myOrdersSupabaseClient && window.supabase && window.supabase.createClient) {
+    myOrdersSupabaseClient = window.supabase.createClient(MYORDERS_SUPABASE_URL, MYORDERS_SUPABASE_ANON_KEY);
+  }
+  return myOrdersSupabaseClient;
+}
+
+// نفس منطق قراءة رقم الطلب/الحالة/السبب الموجود في script.js (renderTable) مع fallback للأعمدة العربية القديمة.
+function myOrdersGetOrderNumber(o) { return o.order_number || o.order_no || o['رقم الطلب'] || '-'; }
+function myOrdersGetStatus(o) { return o.review_status || o['حالة المراجعة'] || 'لم يتم المراجعة'; }
+function myOrdersGetReason(o) { return o.rejection_reason || o.reason || o['سبب الرفض'] || ''; }
+function myOrdersGetCompany(o) { return o.company || o['الشركة'] || '-'; }
+function myOrdersGetProgress(o) { return o.status || o['الحالة'] || '-'; }
+function myOrdersGetDate(o) { return o.date || o.created_at || o['التاريخ'] || o['تاريخ الطلب'] || '-'; }
+
+// نفس دوال parseToIsoDate و extractDateString الموجودة في script.js بالظبط — لتحديد تاريخ الطلب بصيغة موحدة.
+function myOrdersParseToIsoDate(dateStr) {
+  if (!dateStr) return '';
+  const strVal = String(dateStr).trim();
+
+  if (strVal.includes('/')) {
+    const parts = strVal.split(' ')[0].split('/');
+    if (parts.length === 3) {
+      let month = parseInt(parts[0], 10);
+      let day = parseInt(parts[1], 10);
+      let year = parseInt(parts[2], 10);
+      if (year < 100) year += 2000;
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  const cleanStr = strVal.split(' ')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(cleanStr)) return cleanStr;
+  return '';
+}
+function myOrdersExtractDateString(item) {
+  return myOrdersParseToIsoDate(item.date || item.created_at || item['التاريخ'] || item['تاريخ الطلب'] || '');
+}
+// تاريخ اليوم بتوقيت مصر (Africa/Cairo) بصيغة YYYY-MM-DD، بغض النظر عن توقيت جهاز المستخدم نفسه.
+function myOrdersTodayCairoIso() {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date());
+}
+
+// نفس تعريف "معلق" المستخدم في updateKPIs بملف script.js: كل ما هو ليس مقبول وليس مرفوض.
+function myOrdersIsPending(o) {
+  const s = myOrdersGetStatus(o);
+  return s !== MYORDERS_STATUS_ACCEPTED && s !== MYORDERS_STATUS_REJECTED;
+}
+
+function MyOrdersPanel() {
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [session, setSession] = useState(null); // { id, username, name, role }
+
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // ALL | مقبول | مرفوض | معلق
+  const [selectedOrderNum, setSelectedOrderNum] = useState(null);
+
+  const [editStatus, setEditStatus] = useState(MYORDERS_STATUS_ACCEPTED);
+  const [editReason, setEditReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const realtimeChannelRef = React.useRef(null);
+
+  // ── فحص جلسة موجودة بالفعل عند فتح تاب "طلباتي" أول مرة ──
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const client = getMyOrdersSupabaseClient();
+      if (!client) { setCheckingSession(false); return; }
+      setCheckingSession(true);
+      try {
+        const { data: { session: authSession } } = await client.auth.getSession();
+        if (authSession && authSession.user) {
+          const { data: profile, error } = await client
+            .from('profiles')
+            .select('id, username, name, role')
+            .eq('id', authSession.user.id)
+            .single();
+          if (!cancelled && !error && profile) {
+            setSession(profile);
+          }
+        }
+      } catch (e) { /* تجاهل — يظل شاشة تسجيل الدخول */ }
+      if (!cancelled) setCheckingSession(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── تحميل الطلبات: فلترة "المراجع" على السيرفر نفسه (زي ما كان مكتوب في script.js:
+  //    reviewer = currentUser) بدل ما نجيب كل صفوف الجدول (كل المراجعين، كل التاريخ)
+  //    ونفلتر بعدين على الجهاز — وده اللي كان بيسبب البطء الشديد مع جدول كبير.
+  //    فلترة التاريخ بس بتفضل على الجهاز لأن صيغة عمود التاريخ مش موحدة (زي ما هو
+  //    موجود في extractDateString الأصلي بملف script.js)، لكن حجم البيانات دلوقتي
+  //    أصغر بكتير (طلبات المستخدم ده بس مش كل الجدول). ──
+  const loadMyOrders = React.useCallback(async () => {
+    const client = getMyOrdersSupabaseClient();
+    if (!client || !session) return;
+    setLoadingOrders(true);
+    setOrdersError('');
+    try {
+      const orFilter = `reviewer.eq."${session.username}",reviewer.eq."${session.name}"`;
+      let allFetched = [];
+      let from = 0, step = 1000, hasMore = true;
+      while (hasMore) {
+        const { data, error } = await client
+          .from(MYORDERS_TABLE_NAME)
+          .select('*')
+          .or(orFilter)
+          .order('id', { ascending: true })
+          .range(from, from + step - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allFetched = allFetched.concat(data);
+          from += step;
+          if (data.length < step) hasMore = false;
+        } else { hasMore = false; }
+      }
+
+      const todayIso = myOrdersTodayCairoIso();
+      const mine = allFetched.filter((o) => myOrdersExtractDateString(o) === todayIso);
+      setOrders(mine);
+    } catch (e) {
+      setOrdersError('حصل خطأ أثناء جلب طلباتك: ' + e.message);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (session) loadMyOrders();
+  }, [session, loadMyOrders]);
+
+  // ── Realtime: تحديث فوري بدون Reload، لكن فقط للطلبات الخاصة بالمستخدم الحالي ──
+  useEffect(() => {
+    const client = getMyOrdersSupabaseClient();
+    if (!client || !session) return;
+
+    const belongsToMe = (row) => {
+      if (!row) return false;
+      const r = row.reviewer || row['المراجع'] || '';
+      const isMine = r === session.username || r === session.name;
+      const isToday = myOrdersExtractDateString(row) === myOrdersTodayCairoIso();
+      return isMine && isToday;
+    };
+
+    // اسم فريد لكل مرة تُفتح فيها اللوحة (بدل اسم ثابت) عشان نتجنب تعارض مع أي
+    // قناة قديمة بنفس الاسم لسه بتتقفل في الخلفية (Race Condition) لما المستخدم
+    // يبدّل بين تابات "الأدوات" و"طلباتي" بسرعة — وده اللي كان بيسبب الكراش.
+    const topicName = 'my-orders-live-' + session.username + '-' + uid();
+
+    // تنظيف احترازي: لو فيه أي Subscription قديم لنفس الجدول لسه عالق من مرة سابقة، امسحه الأول.
+    try {
+      client.getChannels()
+        .filter((ch) => ch.topic && ch.topic.indexOf('my-orders-live-') !== -1 && ch !== realtimeChannelRef.current)
+        .forEach((ch) => { try { client.removeChannel(ch); } catch (e) {} });
+    } catch (e) { /* تجاهل */ }
+
+    const channel = client.channel(topicName);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: MYORDERS_TABLE_NAME }, (payload) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+      setOrders((prev) => {
+        if (eventType === 'DELETE') {
+          return prev.filter((o) => o.id !== (oldRow && oldRow.id));
+        }
+        if (!belongsToMe(newRow)) {
+          // اتنقل لمراجع تاني أو مش بتاعنا — لو كان موجود عندنا قبل كده، شيله
+          return prev.filter((o) => o.id !== (newRow && newRow.id));
+        }
+        const idx = prev.findIndex((o) => o.id === newRow.id);
+        const updated = idx === -1 ? [...prev, newRow] : prev.slice();
+        if (idx !== -1) updated[idx] = newRow;
+        // نحافظ دايمًا على نفس ترتيب رفع الشيت (id تصاعدي) بالظبط زي جدول لوحة التحكم الأصلية.
+        updated.sort((a, b) => (a.id > b.id ? 1 : a.id < b.id ? -1 : 0));
+        return updated;
+      });
+    });
+    channel.subscribe();
+
+    realtimeChannelRef.current = channel;
+    return () => {
+      try { client.removeChannel(channel); } catch (e) {}
+      if (realtimeChannelRef.current === channel) realtimeChannelRef.current = null;
+    };
+  }, [session]);
+
+  async function handleMyOrdersLogin() {
+    const client = getMyOrdersSupabaseClient();
+    setLoginError('');
+    const username = loginUsername.trim();
+    const password = loginPassword.trim();
+    if (!username || !password) { setLoginError('يرجى كتابة اسم المستخدم وكلمة المرور'); return; }
+    if (!client) { setLoginError('تعذّر الاتصال بالخادم. حاول تحديث الصفحة.'); return; }
+
+    setLoggingIn(true);
+    try {
+      const { data: email, error: lookupError } = await client.rpc('get_login_email', { p_username: username });
+      if (lookupError || !email) { setLoginError('اسم المستخدم أو كلمة المرور غير صحيحة'); return; }
+
+      const { data: authData, error: authError } = await client.auth.signInWithPassword({ email, password });
+      if (authError || !authData.user) { setLoginError('اسم المستخدم أو كلمة المرور غير صحيحة'); return; }
+
+      const { data: profile, error: profileError } = await client
+        .from('profiles')
+        .select('id, username, name, role')
+        .eq('id', authData.user.id)
+        .single();
+      if (profileError || !profile) {
+        setLoginError('تم تسجيل الدخول لكن لا يوجد بروفايل مرتبط بهذا الحساب. راجع الأدمن');
+        await client.auth.signOut();
+        return;
+      }
+      setSession(profile);
+    } catch (e) {
+      setLoginError('حصل خطأ غير متوقع أثناء تسجيل الدخول');
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  async function handleMyOrdersLogout() {
+    const client = getMyOrdersSupabaseClient();
+    if (client) { try { await client.auth.signOut(); } catch (e) {} }
+    setSession(null);
+    setOrders([]);
+    setSelectedOrderNum(null);
+    setLoginUsername('');
+    setLoginPassword('');
+  }
+
+  const stats = React.useMemo(() => {
+    const total = orders.length;
+    const accepted = orders.filter((o) => myOrdersGetStatus(o) === MYORDERS_STATUS_ACCEPTED).length;
+    const rejected = orders.filter((o) => myOrdersGetStatus(o) === MYORDERS_STATUS_REJECTED).length;
+    const pending = total - accepted - rejected;
+    return { total, accepted, rejected, pending };
+  }, [orders]);
+
+  const filteredOrders = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      const num = String(myOrdersGetOrderNumber(o)).toLowerCase();
+      const matchesSearch = !q || num.includes(q);
+      const st = myOrdersGetStatus(o);
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === MYORDERS_STATUS_PENDING ? myOrdersIsPending(o) : st === statusFilter);
+      return matchesSearch && matchesStatus;
+    });
+  }, [orders, search, statusFilter]);
+
+  const selectedOrder = React.useMemo(
+    () => orders.find((o) => String(myOrdersGetOrderNumber(o)) === String(selectedOrderNum)) || null,
+    [orders, selectedOrderNum]
+  );
+
+  useEffect(() => {
+    if (selectedOrder) {
+      const st = myOrdersGetStatus(selectedOrder);
+      setEditStatus([MYORDERS_STATUS_ACCEPTED, MYORDERS_STATUS_REJECTED, MYORDERS_STATUS_PENDING].includes(st) ? st : MYORDERS_STATUS_ACCEPTED);
+      setEditReason(myOrdersGetReason(selectedOrder));
+      setSaveError('');
+    }
+  }, [selectedOrderNum]); // eslint-disable-line
+
+  function selectOrder(num) { setSelectedOrderNum(num); }
+  function backToList() { setSelectedOrderNum(null); }
+
+  async function copyOrderNumber() {
+    if (!selectedOrder) return;
+    const text = String(myOrdersGetOrderNumber(selectedOrder));
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) { /* تجاهل فشل النسخ بصمت */ }
+  }
+
+  async function saveStatusChange() {
+    if (!selectedOrder || !session) return;
+    setSaveError('');
+
+    const reviewerOnRow = selectedOrder.reviewer || selectedOrder['المراجع'] || '';
+    const isOwnOrder = reviewerOnRow === session.username || reviewerOnRow === session.name;
+    if (!isOwnOrder) {
+      setSaveError('غير مسموح لك بتعديل هذا الطلب، لأنه غير مخصص لك.');
+      return;
+    }
+
+    if (MYORDERS_REASON_STATUSES.includes(editStatus) && !editReason.trim()) {
+      setSaveError(editStatus === MYORDERS_STATUS_PENDING ? 'يرجى كتابة سبب التعليق' : 'يرجى كتابة سبب الرفض');
+      return;
+    }
+
+    const client = getMyOrdersSupabaseClient();
+    const matchColumn = selectedOrder.id !== undefined ? 'id' : 'order_number';
+    const matchValue = selectedOrder[matchColumn];
+    const finalReason = MYORDERS_REASON_STATUSES.includes(editStatus) ? editReason.trim() : '-';
+
+    const updateData = {};
+    if ('review_status' in selectedOrder) updateData.review_status = editStatus;
+    if ('حالة المراجعة' in selectedOrder) updateData['حالة المراجعة'] = editStatus;
+    if ('rejection_reason' in selectedOrder) updateData.rejection_reason = finalReason;
+    if ('سبب الرفض' in selectedOrder) updateData['سبب الرفض'] = finalReason;
+
+    setSaving(true);
+    try {
+      // تقييد إضافي عند التحديث نفسه (وليس فقط إخفاء في الواجهة): reviewer = المستخدم الحالي.
+      const { data: updatedRows, error } = await client
+        .from(MYORDERS_TABLE_NAME)
+        .update(updateData)
+        .eq(matchColumn, matchValue)
+        .eq('reviewer', reviewerOnRow)
+        .select();
+
+      if (error) {
+        setSaveError('فشل التحديث: ' + error.message);
+      } else if (!updatedRows || updatedRows.length === 0) {
+        setSaveError('لم يتم حفظ التعديل. حدّث الصفحة وحاول مرة أخرى.');
+      } else {
+        setOrders((prev) => prev.map((o) => (o === selectedOrder ? { ...o, ...updateData } : o)));
+      }
+    } catch (e) {
+      setSaveError('خطأ: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const badgeClassFor = (st) => {
+    if (st === MYORDERS_STATUS_ACCEPTED) return { bg: 'oklch(0.9 0.08 145)', fg: 'oklch(0.35 0.10 145)' };
+    if (st === MYORDERS_STATUS_REJECTED) return { bg: 'oklch(0.92 0.07 25)', fg: 'oklch(0.4 0.15 25)' };
+    return { bg: 'oklch(0.93 0.06 90)', fg: 'oklch(0.4 0.10 90)' };
+  };
+
+  if (checkingSession) {
+    return <div className="py-8 text-center text-[12px] text-[var(--ink-soft)]">جاري التحقق من الجلسة...</div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="space-y-3">
+        <div className="text-center mb-1">
+          <div className="text-[12.5px] font-bold text-[var(--ink)]">تسجيل الدخول لعرض طلباتك</div>
+          <div className="text-[10.5px] text-[var(--ink-soft)] mt-1">استخدم نفس اليوزر والباسورد الخاصين بك</div>
+        </div>
+        <input
+          type="text"
+          value={loginUsername}
+          onChange={(e) => setLoginUsername(e.target.value)}
+          placeholder="اسم المستخدم"
+          className="w-full h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-[12.5px] text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition"
+          onKeyDown={(e) => { if (e.key === 'Enter') handleMyOrdersLogin(); }}
+        />
+        <input
+          type="password"
+          value={loginPassword}
+          onChange={(e) => setLoginPassword(e.target.value)}
+          placeholder="كلمة المرور"
+          className="w-full h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 text-[12.5px] text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition"
+          onKeyDown={(e) => { if (e.key === 'Enter') handleMyOrdersLogin(); }}
+        />
+        {loginError && (
+          <div className="text-[11.5px] text-center rounded-lg px-3 py-2" style={{ background: 'oklch(0.92 0.07 25)', color: 'oklch(0.4 0.15 25)' }}>
+            {loginError}
+          </div>
+        )}
+        <button
+          onClick={handleMyOrdersLogin}
+          disabled={loggingIn}
+          className="w-full h-9 rounded-lg font-semibold text-[12.5px] text-white transition disabled:opacity-60"
+          style={{ background: 'var(--accent)' }}
+        >
+          {loggingIn ? 'جاري الدخول...' : '🔐 تسجيل الدخول'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* شريط المستخدم الحالي */}
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-[var(--ink)] truncate">{session.name}</div>
+          <div className="text-[10px] text-[var(--ink-soft)]">{session.role === 'admin' ? 'أدمن' : 'مراجع'}</div>
+        </div>
+        <button
+          onClick={handleMyOrdersLogout}
+          className="text-[10.5px] font-semibold px-2.5 py-1 rounded-md border border-[var(--line)] bg-[var(--panel-2)] hover:bg-[var(--line-2)] text-[var(--ink-soft)] transition shrink-0"
+        >
+          تسجيل الخروج
+        </button>
+      </div>
+
+      {!selectedOrder ? (
+        <>
+          {/* تنويه: الطلبات المعروضة بتاريخ اليوم فقط (بتوقيت مصر) */}
+
+
+          {/* KPI cards */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'الإجمالي', value: stats.total, dot: 'var(--accent)' },
+              { label: 'مقبول', value: stats.accepted, dot: '#22c55e' },
+              { label: 'مرفوض', value: stats.rejected, dot: '#ef4444' },
+            ].map((k) => (
+              <div key={k.label} className="rounded-lg bg-[var(--panel)] px-2 py-2.5 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-[10px] text-[var(--ink-soft)]">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: k.dot }} />
+                  {k.label}
+                </div>
+                <div className="text-[16px] font-bold text-[var(--ink)] mt-1 font-mono" dir="ltr">
+                  {k.value.toLocaleString('en-US')}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]">
+              <Icon name="search" size={13} />
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ابحث برقم الطلب..."
+              className="w-full h-10 rounded-xl border border-[var(--line)] bg-[var(--panel)] pr-9 pl-3 text-[12.5px] text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {[
+              { key: 'ALL', label: 'الكل' },
+              { key: MYORDERS_STATUS_ACCEPTED, label: 'مقبول', dot: '#22c55e' },
+              { key: MYORDERS_STATUS_REJECTED, label: 'مرفوض', dot: '#ef4444' },
+              { key: MYORDERS_STATUS_PENDING, label: 'معلق', dot: '#eab308' },
+            ].map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl text-[10.5px] font-semibold border transition"
+                style={
+                  statusFilter === f.key
+                    ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }
+                    : { background: 'var(--panel)', color: 'var(--ink-soft)', borderColor: 'var(--line)' }
+                }
+              >
+                {f.dot && (
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: statusFilter === f.key ? '#fff' : f.dot }}
+                  />
+                )}
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {ordersError && (
+            <div className="text-[11.5px] rounded-lg px-3 py-2" style={{ background: 'oklch(0.92 0.07 25)', color: 'oklch(0.4 0.15 25)' }}>
+              {ordersError}
+            </div>
+          )}
+
+          {/* قائمة الطلبات */}
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] overflow-hidden">
+            <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-[var(--line)]">
+              <span className="text-[11.5px] font-bold text-[var(--ink)]">قائمة الطلبات</span>
+              <span className="text-[10.5px] font-mono font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border border-[var(--line)] rounded-full px-2 py-0.5">
+                {filteredOrders.length.toLocaleString('en-US')}
+              </span>
+            </div>
+            <div className="max-h-[430px] overflow-y-auto scroll-thin p-2 space-y-2">
+              {loadingOrders ? (
+                <div className="p-5 text-center text-[11.5px] text-[var(--ink-soft)]">جاري تحميل الطلبات...</div>
+              ) : filteredOrders.length === 0 ? (
+                <div className="p-5 text-center text-[11.5px] text-[var(--ink-soft)]">لا توجد نتائج مطابقة</div>
+              ) : (
+                filteredOrders.map((o) => {
+                  const num = myOrdersGetOrderNumber(o);
+                  const st = myOrdersGetStatus(o);
+                  const bc = badgeClassFor(st);
+                  return (
+                    <button
+                      key={o.id || num}
+                      onClick={() => selectOrder(num)}
+                      className="w-full text-right block px-3.5 py-3 rounded-xl bg-[var(--panel)] border border-[var(--line)] transition hover:border-[var(--accent)]"
+                    >
+                      <div className="text-[12.5px] font-mono font-bold text-[var(--ink)] leading-snug break-all">
+                        {num}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-2">
+                        <span className="text-[10.5px] text-[var(--ink-soft)] truncate">{myOrdersGetCompany(o)}</span>
+                        <span
+                          className="text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 whitespace-nowrap"
+                          style={{ background: bc.bg, color: bc.fg }}
+                        >
+                          {st}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ── تفاصيل الطلب ── */
+        <div className="space-y-3">
+          <button
+            onClick={backToList}
+            className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--accent-ink)] hover:opacity-80 transition"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 6-6 6 6 6" />
+            </svg>
+            رجوع للقائمة
+          </button>
+
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3 space-y-3">
+            {/* رقم الطلب + نسخ */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[10px] text-[var(--ink-soft)]">رقم الطلب</div>
+                <div className="text-[13px] font-bold font-mono text-[var(--ink)] truncate">{myOrdersGetOrderNumber(selectedOrder)}</div>
+              </div>
+              <button
+                onClick={copyOrderNumber}
+                className="text-[10.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] hover:bg-[var(--line-2)] text-[var(--ink-soft)] transition shrink-0 whitespace-nowrap"
+              >
+                {copied ? '✓ تم النسخ' : ' نسخ '}
+              </button>
+            </div>
+
+            {/* بيانات إضافية متاحة */}
+            <div className="grid grid-cols-1 gap-2 text-[11.5px]">
+              <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-2">
+                <div className="text-[10px] text-[var(--ink-soft)]">الشركة</div>
+                <div className="text-[var(--ink)] font-medium mt-0.5 truncate">{myOrdersGetCompany(selectedOrder)}</div>
+              </div>
+              <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-2">
+                <div className="text-[10px] text-[var(--ink-soft)]">التاريخ</div>
+                <div className="text-[var(--ink)] font-medium mt-0.5">{myOrdersGetDate(selectedOrder)}</div>
+              </div>
+              <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-2.5 py-2">
+                <div className="text-[10px] text-[var(--ink-soft)]">حالة الطلب العامة</div>
+                <div className="text-[var(--ink)] font-medium mt-0.5">{myOrdersGetProgress(selectedOrder)}</div>
+              </div>
+            </div>
+
+            {/* تغيير الحالة */}
+            <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2.5 space-y-2.5">
+              <div className="text-[11.5px] font-semibold text-[var(--ink)]">حالة المراجعة</div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  { key: MYORDERS_STATUS_ACCEPTED, label: '🟢 مقبول' },
+                  { key: MYORDERS_STATUS_REJECTED, label: '🔴 مرفوض' },
+                  { key: MYORDERS_STATUS_PENDING, label: '🟡 معلق' },
+                ].map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setEditStatus(s.key)}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition"
+                    style={
+                      editStatus === s.key
+                        ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }
+                        : { background: 'var(--panel)', color: 'var(--ink-soft)', borderColor: 'var(--line)' }
+                    }
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {MYORDERS_REASON_STATUSES.includes(editStatus) && (
+                <div>
+                  <label className="text-[11px] text-[var(--ink-soft)] block mb-1">
+                    {editStatus === MYORDERS_STATUS_PENDING ? 'سبب التعليق' : 'سبب الرفض'}
+                    <span style={{ color: '#f87171' }}> *</span>
+                  </label>
+                  <textarea
+                    value={editReason}
+                    onChange={(e) => setEditReason(e.target.value)}
+                    placeholder={editStatus === MYORDERS_STATUS_PENDING ? 'اكتب سبب التعليق هنا...' : 'اكتب سبب الرفض هنا...'}
+                    rows={3}
+                    className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel)] px-2.5 py-2 text-[12px] text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition resize-none"
+                  />
+                </div>
+              )}
+
+              {!MYORDERS_REASON_STATUSES.includes(editStatus) && myOrdersGetReason(selectedOrder) && myOrdersGetReason(selectedOrder) !== '-' && (
+                <div className="text-[10.5px] text-[var(--ink-soft)]">آخر سبب مسجل: {myOrdersGetReason(selectedOrder)}</div>
+              )}
+
+              {saveError && (
+                <div className="text-[11px] rounded-lg px-2.5 py-2" style={{ background: 'oklch(0.92 0.07 25)', color: 'oklch(0.4 0.15 25)' }}>
+                  {saveError}
+                </div>
+              )}
+
+              <button
+                onClick={saveStatusChange}
+                disabled={saving}
+                className="w-full h-9 rounded-lg font-semibold text-[12px] text-white transition disabled:opacity-60"
+                style={{ background: 'var(--accent)' }}
+              >
+                {saving ? 'جاري الحفظ...' : 'حفظ القرار'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
 
 // ── Theme (dark / light) ──
@@ -4176,6 +4843,27 @@ useEffect(() => {
 }, [layers]);
      // {id,name,kind,color,visible,count,leafletLayer,geojson?,points?}
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarView, setSidebarView] = useState('tools'); // 'tools' | 'myorders' — ميزة "📋 طلباتي"
+
+  // ── اختصار كيبورد: زرار "ذ" (نفس مكان ` فعليًا على الكيبورد) يبدّل بين "الأدوات" و"طلباتي" فورًا ──
+  useEffect(() => {
+    const handleShortcutKey = (e) => {
+      // نتجاهل الاختصار وإحنا بنكتب في أي حقل إدخال (بحث، باسورد...) عشان محدش يتفاجئ وهو بيكتب
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+
+      // e.code ثابت (فيزيائي) بغض النظر عن لغة الكيبورد المفعّلة، وده مكان زرار "ذ" بالظبط
+      // في لوحة المفاتيح العربية. بنتأكد كمان من e.key كـ fallback لأي متصفح/نظام مختلف.
+      const isShortcutKey = e.code === 'Backquote' || e.key === 'ذ' || e.key === '`' || e.key === '~';
+      if (!isShortcutKey) return;
+
+      e.preventDefault();
+      setSidebarView((v) => (v === 'myorders' ? 'tools' : 'myorders'));
+    };
+    window.addEventListener('keydown', handleShortcutKey);
+    return () => window.removeEventListener('keydown', handleShortcutKey);
+  }, []);
+
   const [busy, setBusy] = useState(null);       // string label while a task runs
   const [toast, setToast] = useState(null);
   const [lineWarnings, setLineWarnings] = useState([]); // أسماء طبقات LINE المحملة
@@ -5612,6 +6300,36 @@ downloadBlob(
 
       {/* Actions (scrollable middle) */}
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-4 py-4 space-y-4">
+        {/* ── مفتاح التبديل: الأدوات ⇄ طلباتي ── */}
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl border border-[var(--line)] bg-[var(--panel-2)]">
+          <button
+            onClick={() => setSidebarView('tools')}
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold transition ${
+              sidebarView === 'tools' ? 'bg-[var(--panel)] text-[var(--ink)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink-soft)]'
+            }`}
+          >
+            <Icon name="settings" size={13} />
+            الأدوات
+          </button>
+          <button
+            onClick={() => setSidebarView('myorders')}
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold transition ${
+              sidebarView === 'myorders' ? 'bg-[var(--panel)] text-[var(--ink)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink-soft)]'
+            }`}
+          >
+            <Icon name="table" size={13} />
+            📋 طلباتي
+          </button>
+        </div>
+
+        {/* ملحوظة: اللوحتين (طلباتي/الأدوات) فاضلتين موجودتين في الذاكرة دايمًا ومتخفيه بس بالـ CSS
+            (مش بيتم إلغاء تركيبهم عند التبديل)، عشان لو المراجع فاتح تفاصيل طلب معين وبعدين راح
+            لتاب "الأدوات"، لما يرجع تاني لـ "طلباتي" يلاقي نفس الطلب والتفاصيل زي ما سابها بالظبط. */}
+        <div style={{ display: sidebarView === 'myorders' ? 'block' : 'none' }}>
+          <MyOrdersPanel />
+        </div>
+        <div style={{ display: sidebarView === 'tools' ? 'block' : 'none' }}>
+        <>
         {/* ── Export section ── */}
         <section className="space-y-2">
           <SectionLabel>تصدير</SectionLabel>
@@ -5872,22 +6590,8 @@ downloadBlob(
             onClick={clearAll}
           />
         </section>
-      </div>
-
-      {/* Bottom drop-zones — pinned above footer */}
-      <div className="shrink-0 px-4 py-3 border-t border-[var(--line)] space-y-2 bg-slate-50/40">
-        <div className="flex items-center justify-between mb-1">
-          <SectionLabel>الاستيراد</SectionLabel>
-          <span className="text-[10px] text-slate-400 font-mono">DRAG & DROP</span>
+        </>
         </div>
-<DropZone
-  icon="upload"
-label="تحميل الملفات"
-hint="ارفع الشيب فايل والشيت معًا، أو ارفع أي ملف منهم منفردًا"
-  accept=".zip,.rar,.xlsx,.xls,.csv"
-  multiple={true}
-  onFiles={loadMixedFiles}
-/>
       </div>
 
       {/* Footer */}
