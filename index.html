@@ -721,6 +721,15 @@ global.__unrarCreateExtractorFromData = createExtractorFromData;
     }
     .toast { animation: toastIn 0.22s ease-out; }
 
+    /* My Orders interactions */
+    @keyframes orderCardIn {
+      from { opacity: 0; transform: translateY(10px) scale(.985); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .order-detail-card { animation: orderCardIn .24s cubic-bezier(.2,.8,.2,1); }
+    .order-table-row { transition: background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .order-table-row:hover { transform: translateX(-2px); }
+
     /* Mobile sidebar slide */
     @media (max-width: 1023.98px) {
       .sidebar-mobile {
@@ -4222,6 +4231,8 @@ function MyOrdersPanel() {
   // رقم الطلب الحالي المفتوح في الكارت — بيتخزن في localStorage عشان لو المستخدم
   // بدّل لتاب الأدوات ورجع (أو حتى عمل Reload) يفضل على نفس الطلب ومايبدأ من الأول.
   const [cursorNum, setCursorNum] = useState(null);
+  // كارت التفاصيل مايظهرش غير لما المستخدم يدوس على طلب من الجدول
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [editStatus, setEditStatus] = useState(MYORDERS_STATUS_ACCEPTED);
   const [editReason, setEditReason] = useState('');
@@ -4553,6 +4564,31 @@ function MyOrdersPanel() {
 
   return (
     <div className="space-y-2.5">
+      <style>{`
+        @keyframes myoDetailIn { from { opacity:0; transform: translateY(14px) scale(.98); } to { opacity:1; transform:none; } }
+      `}</style>
+
+      {/* ── الإحصائيات: كارت واحد بأربعة أعمدة ── */}
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] grid grid-cols-4">
+        {[
+          { label: 'الإجمالي', value: stats.total, color: 'var(--ink)' },
+          { label: 'مراجعة', value: stats.reviewed, color: 'var(--ink-soft)' },
+          { label: 'مقبول', value: stats.accepted, color: STATUS_TONE[MYORDERS_STATUS_ACCEPTED].solid },
+          { label: 'مرفوض', value: stats.rejected, color: STATUS_TONE[MYORDERS_STATUS_REJECTED].solid },
+        ].map((k, i) => (
+          <div
+            key={k.label}
+            className="px-1 py-2.5 text-center"
+            style={i === 0 ? undefined : { borderRight: '1px solid var(--line)' }}
+          >
+            <div className="text-[16px] font-bold font-mono leading-none" style={{ color: k.color }} dir="ltr">
+              {k.value.toLocaleString('en-US')}
+            </div>
+            <div className="text-[9.5px] text-[var(--ink-soft)] mt-1 truncate">{k.label}</div>
+          </div>
+        ))}
+      </div>
+
       {/* شريط المستخدم الحالي */}
       <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2">
         <div className="min-w-0">
@@ -4567,33 +4603,81 @@ function MyOrdersPanel() {
         </button>
       </div>
 
-      {/* ── الإحصائيات ── */}
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { label: 'إجمالي الطلبات', value: stats.total, dot: 'var(--accent)' },
-          { label: 'إجمالي المراجعة', value: stats.reviewed, dot: 'var(--ink-soft)' },
-          { label: 'مقبول', value: stats.accepted, dot: STATUS_TONE[MYORDERS_STATUS_ACCEPTED].solid },
-          { label: 'مرفوض', value: stats.rejected, dot: STATUS_TONE[MYORDERS_STATUS_REJECTED].solid },
-        ].map((k) => (
-          <div key={k.label} className="rounded-xl border border-[var(--line)] bg-[var(--panel)] px-2.5 py-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-[10.5px] text-[var(--ink-soft)] min-w-0">
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: k.dot }} />
-              <span className="truncate">{k.label}</span>
-            </div>
-            <div className="text-[15px] font-bold text-[var(--ink)] font-mono leading-none" dir="ltr">
-              {k.value.toLocaleString('en-US')}
-            </div>
-          </div>
-        ))}
-      </div>
-
       {ordersError && (
         <div className="text-[11.5px] rounded-lg px-3 py-2" style={{ background: 'oklch(0.92 0.07 25)', color: 'oklch(0.4 0.15 25)' }}>
           {ordersError}
         </div>
       )}
 
-      {/* ── كارت الطلب الحالي ── */}
+      {/* ── جدول الطلبات: اضغط على أي طلب لفتح التفاصيل ── */}
+      <div className="relative">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]">
+          <Icon name="search" size={13} />
+        </span>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="ابحث برقم الطلب أو الشركة..."
+          className="w-full h-10 rounded-xl border border-[var(--line)] bg-[var(--panel)] pr-9 pl-3 text-[12.5px] text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition"
+        />
+      </div>
+
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 border-b border-[var(--line)]">
+          <span className="text-[11.5px] font-bold text-[var(--ink)]">كل الطلبات <span className="font-normal text-[var(--ink-soft)]">— اضغط على الطلب لفتح التفاصيل</span></span>
+          <span className="text-[10.5px] font-mono font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border border-[var(--line)] rounded-full px-2 py-0.5">
+            {tableRows.length.toLocaleString('en-US')}
+          </span>
+        </div>
+        <div className="grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 px-3 py-1.5 text-[9.5px] font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border-b border-[var(--line)]">
+          <span>رقم الطلب</span>
+          <span>الشركة</span>
+          <span>الطلب</span>
+        </div>
+        <div className="max-h-[300px] overflow-y-auto scroll-thin">
+          {tableRows.length === 0 ? (
+            <div className="p-5 text-center text-[11.5px] text-[var(--ink-soft)]">لا توجد نتائج مطابقة</div>
+          ) : (
+            tableRows.map((o) => {
+              const num = String(myOrdersGetOrderNumber(o));
+              const isCurrent = num === String(cursorNum);
+              const t = toneFor(myOrdersGetStatus(o));
+              return (
+                <button
+                  key={o.id || num}
+                  onClick={() => { setCursorNum(num); setDetailsOpen(true); }}
+                  className="order-table-row w-full text-right grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 items-center px-3 py-2.5 border-b border-[var(--line)] transition cursor-pointer"
+                  style={isCurrent
+                    ? { background: 'var(--panel)', boxShadow: 'inset 2px 0 0 var(--accent)' }
+                    : { background: 'transparent' }}
+                >
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.solid }} />
+                    <span className="text-[10.5px] font-mono font-bold text-[var(--ink)] truncate" dir="ltr">{num}</span>
+                  </span>
+                  <span className="text-[10.5px] text-[var(--ink-soft)] truncate">{myOrdersGetCompany(o)}</span>
+                  <span className="text-[10px] text-[var(--ink-soft)] truncate">{myOrdersGetProgress(o)}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ── تفاصيل الطلب المحدد: تظهر فقط بعد الضغط على طلب من الجدول ── */}
+      {detailsOpen && (
+      <div className="space-y-2.5" style={{ animation:'myoDetailIn .3s cubic-bezier(.2,.85,.25,1) both' }}>
+      <div className="flex items-center justify-between gap-2 mt-1">
+        <div className="min-w-0">
+          <div className="text-[12.5px] font-bold text-[var(--ink)]">تفاصيل الطلب المحدد</div>
+          <div className="text-[10px] text-[var(--ink-soft)] mt-0.5">اتخذ الإجراء، أو اقفل للرجوع للجدول</div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {current && <div className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg border border-[var(--line)] bg-[var(--panel)] text-[var(--ink-soft)]" dir="ltr">#{myOrdersGetOrderNumber(current)}</div>}
+          <button onClick={() => setDetailsOpen(false)} title="إغلاق" className="w-7 h-7 grid place-items-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] text-[var(--ink-soft)] hover:bg-[var(--line-2)] transition text-[11px]">✕</button>
+        </div>
+      </div>
       {loadingOrders && orders.length === 0 ? (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 text-center text-[11.5px] text-[var(--ink-soft)]">
           جاري تحميل الطلبات...
@@ -4603,7 +4687,7 @@ function MyOrdersPanel() {
           لا توجد طلبات لك اليوم
         </div>
       ) : (
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] overflow-hidden">
+        <div key={String(cursorNum || "selected")} className="order-detail-card rounded-2xl border border-[var(--line)] bg-[var(--panel)] overflow-hidden shadow-sm">
           {/* رقم الطلب + نسخ */}
           <div className="px-3.5 pt-3 pb-3 flex items-start justify-between gap-2 border-b border-[var(--line)]">
             <div className="min-w-0">
@@ -4717,61 +4801,533 @@ function MyOrdersPanel() {
           </div>
         </div>
       )}
+      </div>
+      )}
 
-      {/* ── سيرش + جدول كل الطلبات ── */}
-      <div className="relative">
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]">
-          <Icon name="search" size={13} />
-        </span>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="ابحث برقم الطلب أو الشركة..."
-          className="w-full h-10 rounded-xl border border-[var(--line)] bg-[var(--panel)] pr-9 pl-3 text-[12.5px] text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition"
-        />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   🚫 مرفوضاتي — مأخوذة من منطق تاب المرفوضات الموجود في script.js
+   لا يوجد Login مستقل: تستخدم نفس Supabase Auth session الخاصة بـ "طلباتي".
+   ══════════════════════════════════════════════════════════════════════════ */
+const MYREJECTIONS_TABLE_NAME = 'layout';
+
+/* ─────────────────────────────────────────────────────────────
+   🔔 نغمة التحذير للطلب المرفوض
+   حِطّ ملف الصوت بجوار الصفحة وسمّيه: rejection-alert.mp3
+   (أو غيّر الاسم/المسار في السطر اللي تحت)
+   المدة المقترحة: 5 ثواني — الكود بيوقفها تلقائيًا بعد 5 ثواني.
+   ───────────────────────────────────────────────────────────── */
+const REJECTION_ALERT_SOUND = 'rejection-alert.mp3';
+const REJECTION_ALERT_VOLUME = 0.8;   // من 0 لـ 1
+const REJECTION_ALERT_SECONDS = 5;    // مدة التشغيل بالثواني
+
+let _rejAlertAudio = null;
+let _rejAlertStopTimer = null;
+function playRejectionAlert() {
+  try {
+    if (_rejAlertAudio && !_rejAlertAudio.paused) return;
+    if (!_rejAlertAudio) {
+      _rejAlertAudio = new Audio(REJECTION_ALERT_SOUND);
+      _rejAlertAudio.preload = 'auto';
+    }
+    _rejAlertAudio.volume = REJECTION_ALERT_VOLUME;
+    _rejAlertAudio.currentTime = 0;
+    const pr = _rejAlertAudio.play();
+    if (pr && pr.catch) pr.catch(() => {}); // المتصفح ممكن يمنع الصوت قبل أول تفاعل من المستخدم
+    clearTimeout(_rejAlertStopTimer);
+    _rejAlertStopTimer = setTimeout(() => {
+      try { _rejAlertAudio.pause(); _rejAlertAudio.currentTime = 0; } catch (e) {}
+    }, REJECTION_ALERT_SECONDS * 1000);
+  } catch (e) {}
+}
+function stopRejectionAlert() {
+  clearTimeout(_rejAlertStopTimer);
+  try { if (_rejAlertAudio) { _rejAlertAudio.pause(); _rejAlertAudio.currentTime = 0; } } catch (e) {}
+}
+// منع تكرار تنبيه المرفوضات حتى لو React أعاد تركيب الـ component
+// أو تم فتح/إغلاق التاب بدون إعادة تحميل الصفحة.
+const GLOBAL_REJECTION_ALERT_STATE = window.__GLOBAL_REJECTION_ALERT_STATE || {
+  notifiedIds: new Set()
+};
+window.__GLOBAL_REJECTION_ALERT_STATE = GLOBAL_REJECTION_ALERT_STATE;
+
+function showRejectionNoticeOnce(row) {
+  if (!row) return false;
+  const key = row.id != null ? String(row.id) : String(
+    row.order_number || row.order_no || row['رقم الطلب'] || ''
+  );
+  if (!key || GLOBAL_REJECTION_ALERT_STATE.notifiedIds.has(key)) return false;
+  GLOBAL_REJECTION_ALERT_STATE.notifiedIds.add(key);
+  return true;
+}
+
+function MyRejectionsPanel() {
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [session, setSession] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [dateMode, setDateMode] = useState('today');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [search, setSearch] = useState('');
+  const [showNotice, setShowNotice] = useState(false);
+  const [noticeOrder, setNoticeOrder] = useState('');
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [noticeCount, setNoticeCount] = useState(1);
+  const channelRef = React.useRef(null);
+  // عشان تحذير "مرفوضات قديمة لسه مترجعتش" يظهر مرة واحدة عند فتح التاب
+  const initialAlertDoneRef = React.useRef(false);
+
+  const getReviewer = (o) => o.reviewer || o['المراجع'] || '';
+  const getOrder = (o) => o.order_number || o.order_no || o['رقم الطلب'] || '-';
+  const getReason = (o) => o.reason || o.rejection_reason || o['سبب الرفض'] || '-';
+  const getDate = (o) => o.date || o.created_at || o['التاريخ'] || o['تاريخ الطلب'] || '';
+  const extractDate = (o) => {
+    const raw = String(getDate(o) || '').trim();
+    if (!raw) return '';
+    if (raw.includes('/')) {
+      const parts = raw.split(' ')[0].split('/');
+      if (parts.length === 3) {
+        let m = parseInt(parts[0], 10), d = parseInt(parts[1], 10), y = parseInt(parts[2], 10);
+        if (y < 100) y += 2000;
+        return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      }
+    }
+    const clean = raw.split('T')[0].split(' ')[0];
+    return /^\d{4}-\d{2}-\d{2}$/.test(clean) ? clean : '';
+  };
+  const todayCairo = () => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+
+  const loadRejections = React.useCallback(async () => {
+    const client = getMyOrdersSupabaseClient();
+    if (!client || !session) return;
+    setLoading(true);
+    setError('');
+    try {
+      // نفس getRejectedCertRows في script.js: المراجع يرى المرفوضات المخصصة له،
+      // والطلبات التي وصلت لمرحلة "تم الطباعة" لا تظهر له.
+      const reviewerValues = [session.username, session.name].filter(Boolean);
+      let all = [];
+      let from = 0, step = 1000;
+      while (true) {
+        const { data, error } = await client
+          .from(MYREJECTIONS_TABLE_NAME)
+          .select('*')
+          .or('status.eq."مرفوض",was_rejected.eq.true')
+          .in('reviewer', reviewerValues)
+          .neq('status', 'تم الطباعة')
+          .order('id', { ascending: true })
+          .range(from, from + step - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < step) break;
+        from += step;
+      }
+      setRows(all);
+
+      // لو فيه طلبات مرفوضة قديمة لسه المراجع مردّش عليها → تحذير + نغمة (مرة واحدة عند الفتح)
+      const stillPending = all.filter(o => !o.reviewer_action);
+
+      // عند فتح الموقع: تنبيه واحد فقط لأول طلب منتظر.
+      // يتم تسجيل الـ id قبل تشغيل التنبيه حتى لا يعيده Realtime.
+      if (!initialAlertDoneRef.current && stillPending.length > 0) {
+        initialAlertDoneRef.current = true;
+        const firstPending = stillPending[0];
+
+        if (showRejectionNoticeOnce(firstPending)) {
+          setNoticeCount(stillPending.length);
+          setNoticeOrder(String(getOrder(firstPending)));
+          setShowNotice(true);
+          playRejectionAlert();
+          setTimeout(() => setShowNotice(false), 10000);
+        }
+      }
+    } catch (e) {
+      setError('حصل خطأ أثناء جلب المرفوضات: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const client = getMyOrdersSupabaseClient();
+    if (!client) { setCheckingSession(false); return; }
+
+    const loadProfileForUser = async (userId) => {
+      try {
+        const { data: profile } = await client
+          .from('profiles')
+          .select('id, username, name, role')
+          .eq('id', userId)
+          .single();
+        if (!cancelled) setSession(profile || null);
+      } catch (e) {
+        if (!cancelled) setSession(null);
+      }
+    };
+
+    (async () => {
+      try {
+        const { data: { session: authSession } } = await client.auth.getSession();
+        if (!authSession?.user) {
+          if (!cancelled) setSession(null);
+        } else {
+          await loadProfileForUser(authSession.user.id);
+        }
+      } catch (e) {
+        if (!cancelled) setSession(null);
+      }
+      if (!cancelled) setCheckingSession(false);
+    })();
+
+    // بيلتقط تسجيل الدخول/الخروج اللي بيحصل من تاب "طلباتي" مباشرة
+    // بدون الحاجة لعمل Reload للصفحة، لأن الاثنين بيستخدموا نفس Supabase client.
+    const { data: authListener } = client.auth.onAuthStateChange((event, authSession) => {
+      if (cancelled) return;
+      if (!authSession?.user) { setSession(null); return; }
+      loadProfileForUser(authSession.user.id);
+    });
+
+    return () => {
+      cancelled = true;
+      try { authListener?.subscription?.unsubscribe(); } catch (e) {}
+    };
+  }, []);
+
+  useEffect(() => { if (session) loadRejections(); }, [session, loadRejections]);
+
+  // نفس فكرة Realtime الموجودة في script.js، مع تنبيه فقط للطلب المرفوض
+  // الذي reviewer_action فيه فاضي = بانتظار المراجع.
+  useEffect(() => {
+    const client = getMyOrdersSupabaseClient();
+    if (!client || !session) return;
+
+    const belongsToMe = (o) => {
+      if (!o) return false;
+      const r = getReviewer(o);
+      return r === session.username || r === session.name;
+    };
+
+    const channel = client.channel('my-rejections-live-' + session.username + '-' + uid());
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table: MYREJECTIONS_TABLE_NAME
+    }, (payload) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+      const oldRejected = oldRow && oldRow.status === 'مرفوض';
+      const newRejected = newRow && (newRow.status === 'مرفوض' || newRow.was_rejected === true);
+      const isMine = belongsToMe(newRow);
+      const rejectionKey = newRow && newRow.id != null ? String(newRow.id) : String(getOrder(newRow));
+      const isNewPending = eventType === 'INSERT' && newRejected && isMine && !newRow.reviewer_action;
+
+      if (isNewPending && showRejectionNoticeOnce(newRow)) {
+        setNoticeCount(1);
+        setNoticeOrder(String(getOrder(newRow)));
+        setShowNotice(true);
+        playRejectionAlert();
+        setTimeout(() => setShowNotice(false), 10000);
+      }
+
+      setRows(prev => {
+        if (eventType === 'DELETE') {
+          return prev.filter(o => o.id !== (oldRow && oldRow.id));
+        }
+        if (!newRejected || !isMine || newRow.status === 'تم الطباعة') {
+          return prev.filter(o => o.id !== (newRow && newRow.id));
+        }
+        const idx = prev.findIndex(o => o.id === newRow.id);
+        if (idx === -1) return [...prev, newRow];
+        const copy = prev.slice();
+        copy[idx] = newRow;
+        return copy;
+      });
+    }).subscribe();
+
+    channelRef.current = channel;
+    return () => {
+      try { client.removeChannel(channel); } catch (e) {}
+      if (channelRef.current === channel) channelRef.current = null;
+    };
+  }, [session]);
+
+  async function setRejectionReviewerAction(row, action) {
+    if (!session || !row) return;
+    const reviewerOnRow = getReviewer(row);
+    if (reviewerOnRow !== session.username && reviewerOnRow !== session.name) return;
+
+    const client = getMyOrdersSupabaseClient();
+    try {
+      // نفس setRejectionReviewerAction في script.js:
+      // "تم التعديل" أو "تم الرفض للشركة".
+      const { data, error } = await client
+        .from(MYREJECTIONS_TABLE_NAME)
+        .update({ reviewer_action: action })
+        .eq('id', row.id)
+        .select();
+
+      if (error) { alert('فشل التحديث: ' + error.message); return; }
+      if (!data || data.length === 0) {
+        alert('التحديث لم يُنفَّذ فعليًا. راجع صلاحيات قاعدة البيانات.');
+        return;
+      }
+      setRows(prev => prev.map(o => o.id === row.id ? { ...o, reviewer_action: action } : o));
+      setSelectedRow(prev => prev && prev.id === row.id ? { ...prev, reviewer_action: action } : prev);
+    } catch (e) {
+      alert('خطأ: ' + e.message);
+    }
+  }
+
+  const filteredRows = React.useMemo(() => {
+    let result = rows.slice();
+    const today = todayCairo();
+
+    if (dateMode === 'today') {
+      result = result.filter(o => extractDate(o) === today);
+    } else if (dateMode === 'date' && selectedDate) {
+      result = result.filter(o => extractDate(o) === selectedDate);
+    }
+
+    const q = search.trim().toLowerCase();
+    if (q) {
+      result = result.filter(o =>
+        String(getOrder(o)).toLowerCase().includes(q) ||
+        String(getReason(o)).toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [rows, dateMode, selectedDate, search]);
+
+  if (checkingSession) {
+    return <div className="py-8 text-center text-[12px] text-[var(--ink-soft)]">جاري التحقق من الجلسة...</div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 text-center">
+        <div className="text-[13px] font-bold text-[var(--ink)] mb-1">🚫 مرفوضاتي</div>
+        <div className="text-[11.5px] text-[var(--ink-soft)] mb-3">سجّل الدخول من تبويب «طلباتي» أولًا، ثم ارجع إلى «مرفوضات».</div>
+        <div className="text-[11px] text-[var(--muted)]">لا يوجد تسجيل دخول منفصل لهذا التبويب.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* التحذير بيتعمله Portal على body عشان يظهر في نص الشاشة حتى لو التاب مقفول */}
+      {showNotice && ReactDOM.createPortal((
+        <div
+          className="fixed inset-0 z-[2500] grid place-items-center p-4"
+          style={{ background:'rgba(185, 28, 28, 0.55)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)' }}
+          onClick={() => { stopRejectionAlert(); setShowNotice(false); }}
+        >
+          <div
+            className="w-full max-w-lg overflow-hidden rounded-2xl shadow-2xl"
+            style={{ border:'2.5px solid rgba(239,68,68,0.7)' }}
+            onClick={e => e.stopPropagation()}
+            dir="rtl"
+          >
+            {/* ── Header ── */}
+            <div className="px-6 py-5" style={{ background:'linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%)' }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl grid place-items-center shrink-0" style={{ background:'rgba(255,255,255,0.12)', border:'2px solid rgba(255,255,255,0.25)' }}>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <path d="M12 9v4M12 17h.01"/>
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-white font-bold text-[17px] leading-snug">
+                    {noticeCount > 1 ? 'عندك ' + noticeCount + ' طلبات مرفوضة لسه محتاجة رد' : 'عندك طلب مرفوض طباعة'}
+                  </div>
+                  <div className="text-red-200 text-[12.5px] mt-1 leading-relaxed">
+                    لازم تراجع الطلب وترد عليه: تم التعديل أو مرفوض نهائي
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── رقم الطلب ── */}
+            {noticeOrder && (
+              <div className="px-6 py-3 flex items-center gap-3" style={{ background:'rgba(254,226,226,0.95)', borderBottom:'1px solid rgba(239,68,68,0.25)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                <span className="text-[12.5px] font-semibold text-red-800">
+                  {noticeCount > 1 ? 'أقدم طلب:' : 'رقم الطلب:'}&nbsp;
+                  <span className="font-mono bg-red-100 px-2 py-0.5 rounded-md text-red-900" dir="ltr">{noticeOrder}</span>
+                </span>
+              </div>
+            )}
+
+            {/* ── Footer ── */}
+            <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ background:'rgba(255,255,255,0.97)', borderTop:'1px solid rgba(239,68,68,0.2)' }}>
+              <button
+                onClick={() => { stopRejectionAlert(); setShowNotice(false); }}
+                className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-white"
+                style={{ background:'linear-gradient(135deg, #991b1b 0%, #b91c1c 100%)' }}
+              >
+                حسنًا، فهمت
+              </button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      <style>{`
+        @keyframes rejFadeUp { from { opacity:0; transform: translateY(14px) scale(.97); } to { opacity:1; transform: none; } }
+        @keyframes rejScrim  { from { opacity:0; } to { opacity:1; } }
+        @keyframes rejRowIn  { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: none; } }
+        .rej-row { transition: background .16s ease; }
+        .rej-row:hover { background: var(--accent-soft); }
+        .rej-row:hover .rej-chev { opacity:1; transform: translateX(-4px); }
+        .rej-chev { opacity:.3; transition: opacity .16s ease, transform .16s ease; }
+        .rej-seg { transition: background .15s ease, color .15s ease; }
+      `}</style>
+
+      {/* كارت المستخدم */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, padding:14, borderRadius:18, border:'1px solid var(--line)', background:'var(--panel)', boxShadow:'0 1px 2px rgba(15,23,42,.05)' }}>
+        <div style={{ flex:'0 0 auto', width:42, height:42, borderRadius:13, display:'grid', placeItems:'center', fontSize:19, background:'oklch(0.94 0.055 25)', color:'oklch(0.5 0.19 25)' }}>🚫</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:14, fontWeight:800, color:'var(--ink)', letterSpacing:'-.01em' }}>مرفوضاتي</div>
+          <div style={{ fontSize:11, color:'var(--ink-soft)', marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{session.name}</div>
+        </div>
+        <button onClick={loadRejections} disabled={loading} className="btn btn-secondary" style={{ padding:'7px 11px', fontSize:11, borderRadius:10 }}>
+          {loading ? '⏳ تحديث...' : '↻ تحديث'}
+        </button>
       </div>
 
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 border-b border-[var(--line)]">
-          <span className="text-[11.5px] font-bold text-[var(--ink)]">كل الطلبات</span>
-          <span className="text-[10.5px] font-mono font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border border-[var(--line)] rounded-full px-2 py-0.5">
-            {tableRows.length.toLocaleString('en-US')}
-          </span>
+      {/* إحصائيات سريعة */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0,1fr))', gap:8 }}>
+        {[
+          { label:'إجمالي', value: filteredRows.length, tone:'var(--ink)' },
+          { label:'بانتظار الرد', value: filteredRows.filter(o => !o.reviewer_action).length, tone:'oklch(0.55 0.14 70)' },
+          { label:'تم التعديل', value: filteredRows.filter(o => o.reviewer_action === 'تم التعديل').length, tone:'oklch(0.55 0.13 155)' },
+        ].map(st => (
+          <div key={st.label} style={{ padding:'9px 10px', borderRadius:13, border:'1px solid var(--line)', background:'var(--panel)' }}>
+            <div style={{ fontSize:18, fontWeight:800, color:st.tone, lineHeight:1.1, fontVariantNumeric:'tabular-nums' }}>{st.value}</div>
+            <div style={{ fontSize:10, color:'var(--ink-soft)', marginTop:2 }}>{st.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* فلاتر */}
+      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:8 }}>
+        <div style={{ display:'flex', gap:3, padding:3, borderRadius:11, border:'1px solid var(--line)', background:'var(--panel-2)' }}>
+          {[{ k:'today', t:'اليوم' }, { k:'all', t:'الكل' }].map(m => (
+            <button key={m.k} onClick={() => setDateMode(m.k)} className="rej-seg" style={{
+              border:'none', cursor:'pointer', padding:'6px 13px', borderRadius:9, fontSize:11, fontWeight:700, fontFamily:'inherit',
+              background: dateMode === m.k ? 'var(--accent)' : 'transparent',
+              color: dateMode === m.k ? '#fff' : 'var(--ink-soft)'
+            }}>{m.t}</button>
+          ))}
         </div>
-        <div className="grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 px-3 py-1.5 text-[9.5px] font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border-b border-[var(--line)]">
-          <span>رقم الطلب</span>
-          <span>الشركة</span>
-          <span>الطلب</span>
+        <input type="date" value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setDateMode('date'); }}
+          style={{ height:34, borderRadius:11, border:'1px solid var(--line)', background:'var(--panel)', color:'var(--ink)', padding:'0 9px', fontSize:11, fontFamily:'inherit' }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 بحث برقم الطلب أو السبب..."
+          style={{ height:34, flex:'1 1 170px', minWidth:150, borderRadius:11, border:'1px solid var(--line)', background:'var(--panel)', color:'var(--ink)', padding:'0 11px', fontSize:11, fontFamily:'inherit' }} />
+      </div>
+
+      {error && <div className="rounded-lg px-3 py-2 text-[11px]" style={{ background:'oklch(0.92 0.07 25)', color:'oklch(0.4 0.15 25)' }}>{error}</div>}
+
+      {/* الجدول + لوحة التفاصيل فوقه */}
+      <div style={{ position:'relative', borderRadius:18, border:'1px solid var(--line)', background:'var(--panel)', overflow:'hidden', minHeight: selectedRow ? 300 : 0, boxShadow:'0 1px 2px rgba(15,23,42,.05)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, padding:'10px 13px', borderBottom:'1px solid var(--line)', background:'var(--panel-2)' }}>
+          <div style={{ fontSize:11.5, fontWeight:800, color:'var(--ink)' }}>قائمة المرفوضات</div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontSize:10, color:'var(--ink-soft)' }}>اضغط على أي طلب لعرض التفاصيل</span>
+            <span style={{ fontSize:10, fontWeight:700, fontFamily:'ui-monospace, monospace', color:'var(--ink-soft)', background:'var(--panel)', border:'1px solid var(--line)', borderRadius:999, padding:'1px 7px' }} dir="ltr">{filteredRows.length}</span>
+          </div>
         </div>
-        <div className="max-h-[300px] overflow-y-auto scroll-thin">
-          {tableRows.length === 0 ? (
-            <div className="p-5 text-center text-[11.5px] text-[var(--ink-soft)]">لا توجد نتائج مطابقة</div>
-          ) : (
-            tableRows.map((o) => {
-              const num = String(myOrdersGetOrderNumber(o));
-              const isCurrent = num === String(cursorNum);
-              const t = toneFor(myOrdersGetStatus(o));
-              return (
-                <button
-                  key={o.id || num}
-                  onClick={() => setCursorNum(num)}
-                  className="w-full text-right grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 items-center px-3 py-2 border-b border-[var(--line)] transition"
-                  style={isCurrent
-                    ? { background: 'var(--panel)', boxShadow: 'inset 2px 0 0 var(--accent)' }
-                    : { background: 'transparent' }}
-                >
-                  <span className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.solid }} />
-                    <span className="text-[10.5px] font-mono font-bold text-[var(--ink)] truncate" dir="ltr">{num}</span>
-                  </span>
-                  <span className="text-[10.5px] text-[var(--ink-soft)] truncate">{myOrdersGetCompany(o)}</span>
-                  <span className="text-[10px] text-[var(--ink-soft)] truncate">{myOrdersGetProgress(o)}</span>
-                </button>
-              );
-            })
-          )}
-        </div>
+
+        {loading && filteredRows.length === 0 ? (
+          <div style={{ padding:'34px 0', textAlign:'center', fontSize:11.5, color:'var(--ink-soft)' }}>⏳ جاري التحميل...</div>
+        ) : filteredRows.length === 0 ? (
+          <div style={{ padding:'34px 16px', textAlign:'center' }}>
+            <div style={{ fontSize:26, marginBottom:6, opacity:.55 }}>📭</div>
+            <div style={{ fontSize:11.5, color:'var(--ink-soft)' }}>لا توجد طلبات مرفوضة مطابقة</div>
+          </div>
+        ) : (
+          <div className="scroll-thin" style={{ maxHeight:400, overflowY:'auto', overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0, fontSize:11.5 }}>
+              <thead style={{ position:'sticky', top:0, zIndex:2 }}>
+                <tr style={{ background:'var(--panel)' }}>
+                  <th style={{ textAlign:'right', padding:'8px 13px', fontSize:10, fontWeight:700, color:'var(--muted)', letterSpacing:'.03em', borderBottom:'1px solid var(--line)' }}>رقم الطلب</th>
+                  <th style={{ textAlign:'right', padding:'8px 13px', fontSize:10, fontWeight:700, color:'var(--muted)', letterSpacing:'.03em', borderBottom:'1px solid var(--line)' }}>سبب الرفض</th>
+                  <th style={{ textAlign:'right', padding:'8px 13px', fontSize:10, fontWeight:700, color:'var(--muted)', letterSpacing:'.03em', borderBottom:'1px solid var(--line)' }}>حالة الطلب</th>
+                  <th style={{ width:26, borderBottom:'1px solid var(--line)' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row, i) => {
+                  const action = row.reviewer_action || '';
+                  const actionLabel = action === 'تم التعديل' ? 'تم التعديل' : action === 'تم الرفض للشركة' ? 'مرفوض نهائي' : 'لم تتم مراجعتها';
+                  const actionClass = action === 'تم التعديل' ? 'badge badge-accepted' : action === 'تم الرفض للشركة' ? 'badge badge-rejected' : 'badge badge-hold';
+                  const isSel = selectedRow && selectedRow.id === row.id;
+                  return (
+                    <tr key={row.id || getOrder(row)} onClick={() => setSelectedRow(row)} className="rej-row"
+                      style={{ cursor:'pointer', background: isSel ? 'var(--accent-soft)' : (i % 2 ? 'var(--panel-2)' : 'transparent'), animation:'rejRowIn .28s ease both', animationDelay: Math.min(i, 12) * 22 + 'ms' }}>
+                      <td style={{ padding:'10px 13px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)', fontFamily:'ui-monospace, monospace', fontWeight:700, color:'var(--ink)' }} dir="ltr">{getOrder(row)}</td>
+                      <td style={{ padding:'10px 13px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)', color:'var(--ink-soft)', maxWidth:220 }}>{getReason(row)}</td>
+                      <td style={{ padding:'10px 13px', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)' }}><span className={actionClass}>{actionLabel}</span></td>
+                      <td style={{ padding:'10px 8px 10px 0', borderTop: i === 0 ? 'none' : '1px solid var(--line-2)', color:'var(--ink-soft)' }}><span className="rej-chev" style={{ display:'inline-block', fontSize:12 }}>‹</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {selectedRow && (() => {
+          const action = selectedRow.reviewer_action || '';
+          const actionLabel = action === 'تم التعديل' ? 'تم التعديل' : action === 'تم الرفض للشركة' ? 'مرفوض نهائي' : 'لم تتم مراجعتها';
+          const actionClass = action === 'تم التعديل' ? 'badge badge-accepted' : action === 'تم الرفض للشركة' ? 'badge badge-rejected' : 'badge badge-hold';
+          const Field = ({ label, children }) => (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'9px 11px', borderRadius:11, background:'var(--panel-2)' }}>
+              <span style={{ fontSize:10.5, color:'var(--ink-soft)' }}>{label}</span>
+              <span style={{ fontSize:12, fontWeight:700, color:'var(--ink)', textAlign:'left' }}>{children}</span>
+            </div>
+          );
+          return (
+            <div onClick={() => setSelectedRow(null)} style={{
+              position:'absolute', inset:0, zIndex:6, display:'flex', padding:12,
+              background:'color-mix(in oklab, var(--panel) 82%, transparent)', backdropFilter:'blur(7px)',
+              animation:'rejScrim .18s ease both'
+            }}>
+              <div onClick={e => e.stopPropagation()} style={{
+                margin:'auto', width:'100%', maxWidth:400, padding:14, borderRadius:16,
+                border:'1px solid var(--line)', background:'var(--panel)',
+                boxShadow:'0 20px 44px rgba(15,23,42,.22)',
+                animation:'rejFadeUp .3s cubic-bezier(.2,.85,.25,1) both'
+              }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom:12 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:'var(--ink)' }}>تفاصيل الطلب المرفوض</div>
+                  <button onClick={() => setSelectedRow(null)} style={{ width:28, height:28, borderRadius:9, border:'1px solid var(--line)', background:'var(--panel-2)', color:'var(--ink-soft)', cursor:'pointer', fontSize:12, fontFamily:'inherit' }}>✕</button>
+                </div>
+
+                <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+                  <Field label="رقم الطلب"><span style={{ fontFamily:'ui-monospace, monospace' }} dir="ltr">{getOrder(selectedRow)}</span></Field>
+                  <Field label="سبب الرفض">{getReason(selectedRow)}</Field>
+                  <Field label="حالة الطلب"><span className={actionClass}>{actionLabel}</span></Field>
+                </div>
+
+                <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid var(--line)' }}>
+                  <div style={{ fontSize:10.5, color:'var(--ink-soft)', marginBottom:7 }}>{action ? 'تم إرسال الرد' : 'اختر الرد'}</div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button disabled={!!action || loading} onClick={() => setRejectionReviewerAction(selectedRow, 'تم التعديل')} className="btn btn-secondary" style={{ flex:1, padding:'9px 12px', fontSize:11, borderRadius:11 }}>✅ تم التعديل</button>
+                    <button disabled={!!action || loading} onClick={() => setRejectionReviewerAction(selectedRow, 'تم الرفض للشركة')} className="btn btn-danger" style={{ flex:1, padding:'9px 12px', fontSize:11, borderRadius:11 }}>🚫 مرفوض نهائي</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -4822,7 +5378,7 @@ useEffect(() => {
 }, [layers]);
      // {id,name,kind,color,visible,count,leafletLayer,geojson?,points?}
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [sidebarView, setSidebarView] = useState('tools'); // 'tools' | 'myorders' — ميزة "📋 طلباتي"
+  const [sidebarView, setSidebarView] = useState('tools'); // 'tools' | 'myorders' | 'rejections'
 
   // ── اختصار كيبورد: زرار "ذ" (نفس مكان ` فعليًا على الكيبورد) يبدّل بين "الأدوات" و"طلباتي" فورًا ──
   useEffect(() => {
@@ -4837,7 +5393,7 @@ useEffect(() => {
       if (!isShortcutKey) return;
 
       e.preventDefault();
-      setSidebarView((v) => (v === 'myorders' ? 'tools' : 'myorders'));
+      setSidebarView((v) => v === 'tools' ? 'myorders' : (v === 'myorders' ? 'rejections' : 'tools'));
     };
     window.addEventListener('keydown', handleShortcutKey);
     return () => window.removeEventListener('keydown', handleShortcutKey);
@@ -6277,35 +6833,42 @@ downloadBlob(
         </div>
       </header>
 
+      {/* ── تابات ثابتة: الأدوات ⇄ طلباتي (خارج منطقة السكرول عشان تفضل ظاهرة دايمًا) ── */}
+      <nav className="shrink-0 flex items-stretch gap-6 px-5 border-b border-[var(--line)] bg-[var(--panel)]">
+        {[
+          { key: 'tools', icon: 'settings', label: 'الأدوات' },
+          { key: 'myorders', icon: 'table', label: 'طلباتي' },
+          { key: 'rejections', icon: 'x', label: 'مرفوضات' },
+        ].map((t) => {
+          const on = sidebarView === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setSidebarView(t.key)}
+              className="relative flex items-center gap-1.5 py-2.5 text-[12.5px] font-semibold transition"
+              style={{ color: on ? 'var(--ink)' : 'var(--muted)' }}
+            >
+              <Icon name={t.icon} size={13} />
+              {t.label}
+              <span
+                className="absolute right-0 left-0 -bottom-px h-[2px] rounded-full transition"
+                style={{ background: on ? 'var(--accent)' : 'transparent' }}
+              />
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Actions (scrollable middle) */}
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-4 py-4 space-y-4">
-        {/* ── مفتاح التبديل: الأدوات ⇄ طلباتي ── */}
-        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl border border-[var(--line)] bg-[var(--panel-2)]">
-          <button
-            onClick={() => setSidebarView('tools')}
-            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold transition ${
-              sidebarView === 'tools' ? 'bg-[var(--panel)] text-[var(--ink)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink-soft)]'
-            }`}
-          >
-            <Icon name="settings" size={13} />
-            الأدوات
-          </button>
-          <button
-            onClick={() => setSidebarView('myorders')}
-            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[12px] font-semibold transition ${
-              sidebarView === 'myorders' ? 'bg-[var(--panel)] text-[var(--ink)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink-soft)]'
-            }`}
-          >
-            <Icon name="table" size={13} />
-            📋 طلباتي
-          </button>
-        </div>
-
         {/* ملحوظة: اللوحتين (طلباتي/الأدوات) فاضلتين موجودتين في الذاكرة دايمًا ومتخفيه بس بالـ CSS
             (مش بيتم إلغاء تركيبهم عند التبديل)، عشان لو المراجع فاتح تفاصيل طلب معين وبعدين راح
             لتاب "الأدوات"، لما يرجع تاني لـ "طلباتي" يلاقي نفس الطلب والتفاصيل زي ما سابها بالظبط. */}
         <div style={{ display: sidebarView === 'myorders' ? 'block' : 'none' }}>
           <MyOrdersPanel />
+        </div>
+        <div style={{ display: sidebarView === 'rejections' ? 'block' : 'none' }}>
+          <MyRejectionsPanel />
         </div>
         <div style={{ display: sidebarView === 'tools' ? 'block' : 'none' }}>
         <>
