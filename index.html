@@ -4368,6 +4368,9 @@ function MyOrdersPanel() {
         await client.auth.signOut();
         return;
       }
+      // تحديث session فقط هنا؛ الـ useEffect المرتبط بـ session
+      // سيشغّل loadRejections مباشرة بعد اكتمال React state،
+      // وبالتالي يظهر التحذير فور أول تسجيل دخول بدون Refresh.
       setSession(profile);
     } catch (e) {
       setLoginError('حصل خطأ غير متوقع أثناء تسجيل الدخول');
@@ -4623,61 +4626,17 @@ function MyOrdersPanel() {
         />
       </div>
 
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 border-b border-[var(--line)]">
-          <span className="text-[11.5px] font-bold text-[var(--ink)]">كل الطلبات <span className="font-normal text-[var(--ink-soft)]">— اضغط على الطلب لفتح التفاصيل</span></span>
-          <span className="text-[10.5px] font-mono font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border border-[var(--line)] rounded-full px-2 py-0.5">
-            {tableRows.length.toLocaleString('en-US')}
-          </span>
-        </div>
-        <div className="grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 px-3 py-1.5 text-[9.5px] font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border-b border-[var(--line)]">
-          <span>رقم الطلب</span>
-          <span>الشركة</span>
-          <span>الطلب</span>
-        </div>
-        <div className="max-h-[300px] overflow-y-auto scroll-thin">
-          {tableRows.length === 0 ? (
-            <div className="p-5 text-center text-[11.5px] text-[var(--ink-soft)]">لا توجد نتائج مطابقة</div>
-          ) : (
-            tableRows.map((o) => {
-              const num = String(myOrdersGetOrderNumber(o));
-              const isCurrent = num === String(cursorNum);
-              const t = toneFor(myOrdersGetStatus(o));
-              return (
-                <button
-                  key={o.id || num}
-                  onClick={() => { setCursorNum(num); setDetailsOpen(true); }}
-                  className="order-table-row w-full text-right grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 items-center px-3 py-2.5 border-b border-[var(--line)] transition cursor-pointer"
-                  style={isCurrent
-                    ? { background: 'var(--panel)', boxShadow: 'inset 2px 0 0 var(--accent)' }
-                    : { background: 'transparent' }}
-                >
-                  <span className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.solid }} />
-                    <span className="text-[10.5px] font-mono font-bold text-[var(--ink)] truncate" dir="ltr">{num}</span>
-                  </span>
-                  <span className="text-[10.5px] text-[var(--ink-soft)] truncate">{myOrdersGetCompany(o)}</span>
-                  <span className="text-[10px] text-[var(--ink-soft)] truncate">{myOrdersGetProgress(o)}</span>
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* ── تفاصيل الطلب المحدد: تظهر فقط بعد الضغط على طلب من الجدول ── */}
+{/* ── تفاصيل الطلب المحدد: تظهر فقط بعد الضغط على طلب من الجدول ── */}
       {detailsOpen && (
       <div className="space-y-2.5" style={{ animation:'myoDetailIn .3s cubic-bezier(.2,.85,.25,1) both' }}>
       <div className="flex items-center justify-between gap-2 mt-1">
         <div className="min-w-0">
           <div className="text-[12.5px] font-bold text-[var(--ink)]">تفاصيل الطلب المحدد</div>
-          <div className="text-[10px] text-[var(--ink-soft)] mt-0.5">اتخذ الإجراء، أو اقفل للرجوع للجدول</div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {current && <div className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg border border-[var(--line)] bg-[var(--panel)] text-[var(--ink-soft)]" dir="ltr">#{myOrdersGetOrderNumber(current)}</div>}
-          <button onClick={() => setDetailsOpen(false)} title="إغلاق" className="w-7 h-7 grid place-items-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] text-[var(--ink-soft)] hover:bg-[var(--line-2)] transition text-[11px]">✕</button>
+<div className="flex items-center gap-1.5 shrink-0">
+  <button onClick={() => setDetailsOpen(false)} title="إغلاق" className="w-7 h-7 grid place-items-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] text-[var(--ink-soft)] hover:bg-[var(--line-2)] transition text-[11px]">✕</button>
+</div>
         </div>
-      </div>
       {loadingOrders && orders.length === 0 ? (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 text-center text-[11.5px] text-[var(--ink-soft)]">
           جاري تحميل الطلبات...
@@ -4803,6 +4762,50 @@ function MyOrdersPanel() {
       )}
       </div>
       )}
+
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 border-b border-[var(--line)]">
+          <span className="text-[11.5px] font-bold text-[var(--ink)]">كل الطلبات <span className="font-normal text-[var(--ink-soft)]">— اضغط على الطلب لفتح التفاصيل</span></span>
+          <span className="text-[10.5px] font-mono font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border border-[var(--line)] rounded-full px-2 py-0.5">
+            {tableRows.length.toLocaleString('en-US')}
+          </span>
+        </div>
+        <div className="grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 px-3 py-1.5 text-[9.5px] font-semibold text-[var(--ink-soft)] bg-[var(--panel)] border-b border-[var(--line)]">
+          <span>رقم الطلب</span>
+          <span>الشركة</span>
+          <span>الطلب</span>
+        </div>
+        <div className="max-h-[300px] overflow-y-auto scroll-thin">
+          {tableRows.length === 0 ? (
+            <div className="p-5 text-center text-[11.5px] text-[var(--ink-soft)]">لا توجد نتائج مطابقة</div>
+          ) : (
+            tableRows.map((o) => {
+              const num = String(myOrdersGetOrderNumber(o));
+              const isCurrent = num === String(cursorNum);
+              const t = toneFor(myOrdersGetStatus(o));
+              return (
+                <button
+                  key={o.id || num}
+                  onClick={() => { setCursorNum(num); setDetailsOpen(true); }}
+                  className="order-table-row w-full text-right grid grid-cols-[1.2fr_1fr_0.9fr] gap-2 items-center px-3 py-2.5 border-b border-[var(--line)] transition cursor-pointer"
+                  style={isCurrent
+                    ? { background: 'var(--panel)', boxShadow: 'inset 2px 0 0 var(--accent)' }
+                    : { background: 'transparent' }}
+                >
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.solid }} />
+                    <span className="text-[10.5px] font-mono font-bold text-[var(--ink)] truncate" dir="ltr">{num}</span>
+                  </span>
+                  <span className="text-[10.5px] text-[var(--ink-soft)] truncate">{myOrdersGetCompany(o)}</span>
+                  <span className="text-[10px] text-[var(--ink-soft)] truncate">{myOrdersGetProgress(o)}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      
 
     </div>
   );
