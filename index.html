@@ -4824,31 +4824,66 @@ const MYREJECTIONS_TABLE_NAME = 'layout';
    المدة المقترحة: 5 ثواني — الكود بيوقفها تلقائيًا بعد 5 ثواني.
    ───────────────────────────────────────────────────────────── */
 const REJECTION_ALERT_SOUND = 'rejection-alert.mp3';
-const REJECTION_ALERT_VOLUME = 0.8;   // من 0 لـ 1
-const REJECTION_ALERT_SECONDS = 5;    // مدة التشغيل بالثواني
+const REJECTION_ALERT_VOLUME = 0.8;
+const REJECTION_ALERT_SECONDS = 5;
 
 let _rejAlertAudio = null;
 let _rejAlertStopTimer = null;
+
 function playRejectionAlert() {
   try {
-    if (_rejAlertAudio && !_rejAlertAudio.paused) return;
-    if (!_rejAlertAudio) {
-      _rejAlertAudio = new Audio(REJECTION_ALERT_SOUND);
-      _rejAlertAudio.preload = 'auto';
-    }
-    _rejAlertAudio.volume = REJECTION_ALERT_VOLUME;
-    _rejAlertAudio.currentTime = 0;
-    const pr = _rejAlertAudio.play();
-    if (pr && pr.catch) pr.catch(() => {}); // المتصفح ممكن يمنع الصوت قبل أول تفاعل من المستخدم
+    // إيقاف أي صوت سابق
     clearTimeout(_rejAlertStopTimer);
+
+    if (_rejAlertAudio) {
+      try {
+        _rejAlertAudio.pause();
+        _rejAlertAudio.currentTime = 0;
+        _rejAlertAudio.src = '';
+        _rejAlertAudio.load();
+      } catch (e) {}
+    }
+
+    // إنشاء Audio جديد + منع استخدام نسخة Cache القديمة
+    const cacheBuster = `?v=${Date.now()}`;
+    _rejAlertAudio = new Audio(
+      `${REJECTION_ALERT_SOUND}${cacheBuster}`
+    );
+
+    _rejAlertAudio.preload = 'auto';
+    _rejAlertAudio.volume = REJECTION_ALERT_VOLUME;
+
+    // تشغيل من البداية
+    _rejAlertAudio.currentTime = 0;
+
+    const playPromise = _rejAlertAudio.play();
+
+    if (playPromise && playPromise.catch) {
+      playPromise.catch((error) => {
+        console.warn('Rejection alert audio failed:', error);
+      });
+    }
+
+    // إيقاف الصوت بعد المدة المحددة
     _rejAlertStopTimer = setTimeout(() => {
-      try { _rejAlertAudio.pause(); _rejAlertAudio.currentTime = 0; } catch (e) {}
+      stopRejectionAlert();
     }, REJECTION_ALERT_SECONDS * 1000);
-  } catch (e) {}
+
+  } catch (error) {
+    console.warn('Rejection alert audio error:', error);
+    _rejAlertAudio = null;
+  }
 }
+
 function stopRejectionAlert() {
   clearTimeout(_rejAlertStopTimer);
-  try { if (_rejAlertAudio) { _rejAlertAudio.pause(); _rejAlertAudio.currentTime = 0; } } catch (e) {}
+
+  try {
+    if (_rejAlertAudio) {
+      _rejAlertAudio.pause();
+      _rejAlertAudio.currentTime = 0;
+    }
+  } catch (e) {}
 }
 // منع تكرار تنبيه المرفوضات حتى لو React أعاد تركيب الـ component
 // أو تم فتح/إغلاق التاب بدون إعادة تحميل الصفحة.
