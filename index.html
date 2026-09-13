@@ -4829,10 +4829,34 @@ const REJECTION_ALERT_SECONDS = 5;
 
 let _rejAlertAudio = null;
 let _rejAlertStopTimer = null;
+let _rejAlertPendingRetry = false;
+let _rejAlertUserInteracted = false;
+
+function markRejectionAlertUnlocked() {
+  if (_rejAlertUserInteracted) return;
+  _rejAlertUserInteracted = true;
+  document.removeEventListener('click', markRejectionAlertUnlocked, true);
+  document.removeEventListener('keydown', markRejectionAlertUnlocked, true);
+  document.removeEventListener('touchstart', markRejectionAlertUnlocked, true);
+
+  // لو كان فيه صوت مستنّي إذن، شغّله فورًا دلوقتي
+  if (_rejAlertPendingRetry) {
+    _rejAlertPendingRetry = false;
+    playRejectionAlert();
+  }
+}
+
+// نعلّق الاستماع لأول تفاعل من أول ما الصفحة تفتح — مش بعد ما الصوت يترفض.
+// كده كتابة اليوزرنيم/الباسورد نفسها (keydown) بتفتح إمكانية تشغيل الصوت مقدّمًا،
+// قبل ما يحصل أي رفض فعلي.
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', markRejectionAlertUnlocked, true);
+  document.addEventListener('keydown', markRejectionAlertUnlocked, true);
+  document.addEventListener('touchstart', markRejectionAlertUnlocked, true);
+}
 
 function playRejectionAlert() {
   try {
-    // إيقاف أي صوت سابق
     clearTimeout(_rejAlertStopTimer);
 
     if (_rejAlertAudio) {
@@ -4844,31 +4868,33 @@ function playRejectionAlert() {
       } catch (e) {}
     }
 
-    // إنشاء Audio جديد + منع استخدام نسخة Cache القديمة
     const cacheBuster = `?v=${Date.now()}`;
-    _rejAlertAudio = new Audio(
-      `${REJECTION_ALERT_SOUND}${cacheBuster}`
-    );
-
+    _rejAlertAudio = new Audio(`${REJECTION_ALERT_SOUND}${cacheBuster}`);
     _rejAlertAudio.preload = 'auto';
     _rejAlertAudio.volume = REJECTION_ALERT_VOLUME;
-
-    // تشغيل من البداية
     _rejAlertAudio.currentTime = 0;
 
     const playPromise = _rejAlertAudio.play();
 
-    if (playPromise && playPromise.catch) {
-      playPromise.catch((error) => {
-        console.warn('Rejection alert audio failed:', error);
-      });
+    if (playPromise && playPromise.then) {
+      playPromise
+        .then(() => {
+          _rejAlertStopTimer = setTimeout(stopRejectionAlert, REJECTION_ALERT_SECONDS * 1000);
+        })
+        .catch((error) => {
+          // المتصفح رفض التشغيل (لسه ما حصلش أي تفاعل من المستخدم أصلاً على الصفحة).
+          // نستنى أول كليك/كتابة/لمسة ونعيد المحاولة فورًا لحظة ما يحصل.
+          console.warn('Rejection alert blocked by autoplay policy, waiting for user gesture:', error);
+          _rejAlertPendingRetry = true;
+          if (!_rejAlertUserInteracted) {
+            document.addEventListener('click', markRejectionAlertUnlocked, true);
+            document.addEventListener('keydown', markRejectionAlertUnlocked, true);
+            document.addEventListener('touchstart', markRejectionAlertUnlocked, true);
+          }
+        });
+    } else {
+      _rejAlertStopTimer = setTimeout(stopRejectionAlert, REJECTION_ALERT_SECONDS * 1000);
     }
-
-    // إيقاف الصوت بعد المدة المحددة
-    _rejAlertStopTimer = setTimeout(() => {
-      stopRejectionAlert();
-    }, REJECTION_ALERT_SECONDS * 1000);
-
   } catch (error) {
     console.warn('Rejection alert audio error:', error);
     _rejAlertAudio = null;
@@ -4877,7 +4903,6 @@ function playRejectionAlert() {
 
 function stopRejectionAlert() {
   clearTimeout(_rejAlertStopTimer);
-
   try {
     if (_rejAlertAudio) {
       _rejAlertAudio.pause();
