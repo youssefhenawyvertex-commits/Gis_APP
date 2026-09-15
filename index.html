@@ -1549,7 +1549,7 @@ function featureMetricsHtml(feature, zone, hemi) {
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:6px 0;${accent ? "border-top:1px solid #30363d" : ""}">
       <span style="color:#8b949e;font-size:11.5px">${label}</span>
       <span style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:13px;color:${accent ? "#dc2626" : "#0f7010"}">
-        ${val} <span style="color:#484f58;font-weight:500;font-size:11px">${unit}</span>
+        <span data-copy-area="${String(val).replace(/\"/g, '&quot;')} ${unit}" title="اضغط للنسخ" style="cursor:pointer">${val}</span> <span style="color:#484f58;font-weight:500;font-size:11px">${unit}</span>
       </span>
     </div>`;
 
@@ -7569,6 +7569,7 @@ title="تحريك الشيب فايل"
         state={smartDescState}
         setState={setSmartDescState}
         pickRef={smartDescPickRef}
+        showToast={showToast}
       />
 
       {/* ── CalculatorModal ── */}
@@ -7593,7 +7594,7 @@ const SectionLabel = ({ children, className = "" }) => (
 /* ══════════════════════════════════════════════════════════════════════════
    الوصف الذكي — SmartDescriptionModal
    ══════════════════════════════════════════════════════════════════════════ */
-function SmartDescriptionModal({ open, onClose, type, onTypeChange, state, setState, pickRef }) {
+function SmartDescriptionModal({ open, onClose, type, onTypeChange, state, setState, pickRef, showToast }) {
   const wrapRef = React.useRef(null);
   const posRef = React.useRef({ x: null, y: null });
   const dragState = React.useRef(null);
@@ -7893,6 +7894,37 @@ function SmartDescriptionModal({ open, onClose, type, onTypeChange, state, setSt
     if (!description || errors.length) return;
     try { await navigator.clipboard.writeText(description); setCopied(true); setTimeout(()=>setCopied(false),1500); } catch {}
   };
+
+  // نسخ قيمة المساحة بمجرد الضغط عليها (بدون الوحدة).
+  const copyAreaValue = async (value) => {
+    if (value == null || value === "" || value === "—") return;
+    try {
+      await navigator.clipboard.writeText(String(value));
+      showToast?.("تم نسخ المساحة", "ok");
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = String(value); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+      showToast?.("تم نسخ المساحة", "ok");
+    }
+  };
+
+  React.useEffect(() => {
+    const onAreaClick = (e) => {
+      const el = e.target.closest?.("[data-copy-area]");
+      if (el) { copyAreaValue(el.dataset.copyArea); return; }
+      // حقول عرض المساحات في النافذة عبارة عن divs؛ انسخ الرقم عند الضغط عليها.
+      const box = e.target.closest?.("div");
+      if (!box || box.closest("button,input,textarea,select")) return;
+      const text = (box.textContent || "").trim().replace(/\s+/g, " ");
+      if (/^-?\d+(?:\.\d+)?\s*(?:م²|فدان)?$/.test(text)) {
+        copyAreaValue(text);
+        box.title = "تم نسخ المساحة ✓";
+      }
+    };
+    document.addEventListener("click", onAreaClick);
+    return () => document.removeEventListener("click", onAreaClick);
+  });
 
   const initStyle = posRef.current.x !== null ? {left:posRef.current.x+"px",top:posRef.current.y+"px"} : {left:"50%",top:"50%",transform:"translate(-50%,-50%)"};
   const inputCls="w-full h-9 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-2.5 text-[11.5px] text-[var(--ink)] outline-none focus:ring-2 focus:ring-[var(--accent)]/20";
