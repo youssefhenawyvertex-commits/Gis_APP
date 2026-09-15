@@ -3070,6 +3070,7 @@ const CADExportModal = ({ open, onClose, layers }) => {
   const svgRef = useRef(null);
   const [mode, setMode] = useState("label");
   const [strokeScale, setStrokeScale] = useState(1.0);
+  const [hatchDensity, setHatchDensity] = useState(8);
   const [hatchedIds, setHatchedIds] = useState(() => new Set());
   const [labelItems, setLabelItems] = useState(() => new Map());
   const dragRef   = useRef(null);
@@ -3082,13 +3083,15 @@ const CADExportModal = ({ open, onClose, layers }) => {
   const [nextLabelId, setNextLabelId] = useState(0);
   const [labelPx, setLabelPx] = useState(28);
   const [labelTool, setLabelTool] = useState(null);
+  const [selectedLetter, setSelectedLetter] = useState("");
   const [inlineInput, setInlineInput] = useState(null);
+  const draggedLetterRef = useRef("");
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (open) {
       setHatchedIds(new Set()); setLabelItems(new Map());
-      setSelectedLabel(null); setInlineInput(null); setLabelTool(null);
+      setSelectedLabel(null); setInlineInput(null); setLabelTool(null); setSelectedLetter("");
       setZoom(1); setPan({ x: null, y: null });
     }
   }, [open]);
@@ -3192,7 +3195,7 @@ const CADExportModal = ({ open, onClose, layers }) => {
     const polyW = pxmax - pxmin || dimMax * 0.01;
     const polyH = pymax - pymin || dimMax * 0.01;
     const polyDim = Math.max(polyW, polyH);
-    const hatchSpacing = Math.min(Math.max(polyDim / 8, dimMax * 0.004), dimMax * 0.05);
+    const hatchSpacing = Math.min(Math.max(polyDim / hatchDensity, dimMax * 0.0015), dimMax * 0.08);
     const labelFontSize = Math.max(baseLabelFontSize, dimMax * 0.010);
     const polyStrokeWidth = strokeWidth;
 
@@ -3286,13 +3289,20 @@ const CADExportModal = ({ open, onClose, layers }) => {
 
     const wrap = wrapperRef.current;
     if (!wrap) return;
+    if (selectedLetter) {
+      addLabelAtPoint(sceneX, sceneY, selectedLetter);
+      setSelectedLetter("");
+      setLabelTool(null);
+      return;
+    }
     const wrect = wrap.getBoundingClientRect();
     setInlineInput({
       sceneX, sceneY,
       screenXWrap: e.clientX - wrect.left,
       screenYWrap: e.clientY - wrect.top,
-      value: "",
+      value: draggedLetterRef.current || "",
     });
+    draggedLetterRef.current = "";
     setLabelTool(null);
     requestAnimationFrame(() => { try { inputRef.current?.focus(); } catch {} });
   };
@@ -3554,6 +3564,15 @@ const CADExportModal = ({ open, onClose, layers }) => {
                   بعد إضافة الترميز: اضغط عليه ليظهر مقبضا التحريك <span className="inline-block w-4 h-4 align-middle bg-blue-600 text-white rounded text-[9px] leading-4 text-center">✥</span> والحجم <span className="inline-block w-4 h-4 align-middle bg-blue-600 text-white rounded text-[9px] leading-4 text-center">◢</span>.<br/>
                   Enter للتأكيد · Esc للإلغاء.
                 </div>
+                <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-2.5">
+                  <div className="text-[11px] font-semibold text-[var(--ink)] mb-2">حروف الترميز السريع</div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {Array.from({length:26}, (_,i) => String.fromCharCode(65+i)).map(letter => (
+                      <button key={letter} onClick={() => { setSelectedLetter(letter); setMode("label"); setLabelTool("write"); }} className={`h-8 rounded-md border font-mono font-bold text-[12px] transition ${selectedLetter===letter ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--line)] bg-[var(--panel)] hover:bg-[var(--accent-soft)] hover:border-[var(--accent)] text-[var(--ink)]"}`} title="اضغط الحرف ثم اضغط مكانه على الرسم">{letter}</button>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-[var(--ink-soft)] mt-2">اضغط الحرف أولًا، ثم اضغط في المكان المطلوب داخل الرسم.</div>
+                </div>
                 <div>
                   <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1.5">
                     <span>حجم الخط (يطبَّق على الكل)</span>
@@ -3596,6 +3615,11 @@ const CADExportModal = ({ open, onClose, layers }) => {
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3">
                 <div className="text-[12px] text-slate-600 leading-relaxed">اضغط على أي مضلع لتهشيره. كل طبقة تحصل على نمط تهشير مختلف تلقائياً.</div>
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1.5"><span>كثافة التهشير</span><span className="font-mono text-slate-900">{hatchDensity} خطوط</span></div>
+                  <input type="range" min={2} max={30} step={1} value={hatchDensity} onChange={e => setHatchDensity(Number(e.target.value))} className="w-full accent-slate-900" />
+                  <div className="flex justify-between text-[9px] text-slate-400"><span>قليل</span><span>كثير</span></div>
+                </div>
                 <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10.5px]">
                   <span className="text-slate-500">المهشّر: <span className="font-mono text-slate-700">{hatchedIds.size}/{(polyMetaSorted||[]).length}</span></span>
                   {hatchedIds.size > 0 && <button onClick={() => setHatchedIds(new Set())} className="text-slate-600 hover:text-red-600 font-medium">إلغاء الكل</button>}
@@ -3612,6 +3636,15 @@ const CADExportModal = ({ open, onClose, layers }) => {
             ref={el => { wrapperRef.current = el; }}
             className="bg-slate-100 p-4 min-h-0 overflow-hidden relative select-none flex items-center justify-center"
             style={{ cursor: isPanning.current ? "grabbing" : (mode === "label" && labelTool === "write" ? "crosshair" : "default") }}
+            onDragOver={e => { if (e.dataTransfer.types.includes("text/plain")) e.preventDefault(); }}
+            onDrop={e => {
+              const letter = e.dataTransfer.getData("text/plain");
+              if (!/^[A-Za-z]$/.test(letter)) return;
+              e.preventDefault(); e.stopPropagation();
+              draggedLetterRef.current = letter.toUpperCase();
+              setMode("label"); setLabelTool("write");
+              handleSvgClick(e);
+            }}
             onWheel={e => {
               e.preventDefault();
               const svg = svgRef.current;
@@ -3691,7 +3724,8 @@ const CADExportModal = ({ open, onClose, layers }) => {
                     const sp = layerPolys.length > 0
                       ? layerPolys.map(p => p.hatchSpacing).sort((a,b)=>a-b)[Math.floor(layerPolys.length/2)]
                       : dimMax * 0.012;
-                    const sw = Math.max(sp * 0.08, strokeWidth * 0.7);
+                    // سمك ثابت نسبيًا حتى لا تتحول الخطوط إلى شريط أسود عند اختلاف مقياس الرسم.
+                    const sw = Math.max(strokeWidth * 0.35, 0.6);
                     return (
                       <pattern key={idx} id={`cadHatch${idx}`} patternUnits="userSpaceOnUse" width={sp} height={sp} patternTransform={`rotate(${pat.angle})`}>
                         <line x1="0" y1="0" x2="0" y2={sp} stroke="black" strokeWidth={sw} />
@@ -5490,6 +5524,13 @@ useEffect(() => {
     };
 const onDrop = (e) => {
   e.preventDefault();
+
+  // حروف ترميز الكاد تُسحب داخل الرسم وليست ملفات؛ لا تمررها لمعالج رفع الملفات.
+  const draggedText = e.dataTransfer?.getData("text/plain") || "";
+  if (/^[A-Za-z]$/.test(draggedText)) {
+    e.stopPropagation();
+    return;
+  }
 
   dragCounterRef.current = 0;
   setGlobalDrag(false);
