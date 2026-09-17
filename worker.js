@@ -15,11 +15,19 @@ const SYSTEM_PROMPT = `
 3) لو لم يذكر المستخدم حالة السور أو المساحات اللازمة للحكم، اسأله عنها بدل التخمين.
 `;
 
+const CORS_HEADERS = {
+  "access-control-allow-origin": "https://youssefhenawyvertex-commits.github.io",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "Content-Type",
+  "access-control-max-age": "86400"
+};
+
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
   headers: {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store"
+    "cache-control": "no-store",
+    ...CORS_HEADERS
   }
 });
 
@@ -44,6 +52,7 @@ export default {
     }
 
     if (url.pathname === "/api/chat") {
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
       try {

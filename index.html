@@ -5439,6 +5439,10 @@ const WISE_REVIEWER_WELCOME = {
   text: "مساء الخير 👋\nأنا المراجع الحكيم. احكيلي الحالة زي ما هي، وأنا هراجعها معاك خطوة خطوة لحد ما نوصل للقرار الأنسب."
 };
 
+const WISE_REVIEWER_API = window.location.hostname.endsWith(".workers.dev")
+  ? "/api/chat"
+  : "https://gis-app.youssefamen62.workers.dev/api/chat";
+
 const WiseReviewerChat = ({ open, onClose, messages, onSend, busy, onClear }) => {
   const [draft, setDraft] = useState("");
   const listRef = useRef(null);
@@ -5558,7 +5562,7 @@ const [baseMapOpen, setBaseMapOpen] = useState(false);
     setWiseMessages(nextMessages);
     setWiseChatBusy(true);
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(WISE_REVIEWER_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
