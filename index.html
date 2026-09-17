@@ -790,9 +790,6 @@ const Icon = ({ name, size = 18, className = "" }) => {
     move: <><path d="m5 9-3 3 3 3" /><path d="m9 5 3-3 3 3" /><path d="m15 19-3 3-3-3" /><path d="m19 9 3 3-3 3" /><path d="M2 12h20" /><path d="M12 2v20" /></>,
     table: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>,
-    bot: <><rect x="4" y="7" width="16" height="13" rx="4" /><path d="M9 12h.01M15 12h.01M9 16h6M12 7V4M9 4h6" /></>,
-    send: <><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></>,
-    sparkles: <><path d="m12 3-1.1 3.4a2 2 0 0 1-1.3 1.3L6.2 8.8l3.4 1.1a2 2 0 0 1 1.3 1.3L12 14.6l1.1-3.4a2 2 0 0 1 1.3-1.3l3.4-1.1-3.4-1.1a2 2 0 0 1-1.3-1.3Z" /><path d="m5 16-.6 1.8a1 1 0 0 1-.6.6L2 19l1.8.6a1 1 0 0 1 .6.6L5 22l.6-1.8a1 1 0 0 1 .6-.6L8 19l-1.8-.6a1 1 0 0 1-.6-.6Z" /></>,
 "land-plot": (
   <>
     <path d="m12 8 6-3-6-3v10" />
@@ -5433,75 +5430,6 @@ function MyRejectionsPanel() {
   );
 }
 
-const WISE_REVIEWER_WELCOME = {
-  id: "wise-welcome",
-  role: "assistant",
-  text: "مساء الخير 👋\nأنا المراجع الحكيم. احكيلي الحالة زي ما هي، وأنا هراجعها معاك خطوة خطوة لحد ما نوصل للقرار الأنسب."
-};
-
-const WISE_REVIEWER_API = window.location.hostname.endsWith(".workers.dev")
-  ? "/api/chat"
-  : "https://gis-app.youssefamen62.workers.dev/api/chat";
-
-const WiseReviewerChat = ({ open, onClose, messages, onSend, busy, onClear }) => {
-  const [draft, setDraft] = useState("");
-  const listRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    requestAnimationFrame(() => {
-      if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-    });
-  }, [open, messages, busy]);
-
-  const submit = () => {
-    const text = draft.trim();
-    if (!text || busy) return;
-    setDraft("");
-    onSend(text);
-  };
-
-  return (
-    <div
-      className={`fixed left-4 z-[850] w-[360px] max-w-[calc(100vw-2rem)] transition-all duration-200 ${open ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-3 pointer-events-none"}`}
-      style={{ bottom: "9.5rem" }}
-      role="dialog"
-      aria-label="المراجع الحكيم"
-      aria-hidden={!open}
-    >
-      <div className="h-[460px] max-h-[calc(100vh-12rem)] min-h-[330px] rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl overflow-hidden flex flex-col">
-        <div className="px-3.5 py-3 flex items-center gap-3 border-b border-[var(--line-2)] bg-[var(--panel)]">
-          <span className="relative grid place-items-center w-10 h-10 rounded-xl text-white shrink-0" style={{ background: "linear-gradient(135deg, var(--accent), #2563eb)" }}>
-            <Icon name="bot" size={20} />
-            <span className="absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--panel)]" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="text-[13.5px] font-bold text-[var(--ink)]">المراجع الحكيم</div>
-            <div className="text-[10.5px] text-[var(--ink-soft)] mt-0.5">معاك نراجع الحالة ونوصل للقرار الصح</div>
-          </div>
-          <button onClick={onClear} className="h-8 px-2 rounded-lg text-[10.5px] text-[var(--ink-soft)] hover:bg-[var(--panel-2)] transition" title="مسح المحادثة">مسح</button>
-          <button onClick={onClose} className="grid place-items-center w-8 h-8 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--panel-2)] transition" title="إغلاق"><Icon name="close" size={16} /></button>
-        </div>
-        <div ref={listRef} className="flex-1 overflow-y-auto scroll-thin px-3 py-3 space-y-3 bg-[var(--panel-2)]">
-          {messages.map(message => (
-            <div key={message.id} className={`flex ${message.role === "user" ? "justify-start" : "justify-end"}`}>
-              <div className={`max-w-[86%] px-3 py-2.5 text-[12.5px] leading-6 whitespace-pre-wrap shadow-sm ${message.role === "user" ? "rounded-2xl rounded-tr-md text-white" : "rounded-2xl rounded-tl-md border border-[var(--line)] bg-[var(--panel)] text-[var(--ink)]"}`} style={message.role === "user" ? { background: "var(--accent)" } : undefined}>{message.text}</div>
-            </div>
-          ))}
-          {busy && <div className="flex justify-end"><div className="rounded-2xl rounded-tl-md border border-[var(--line)] bg-[var(--panel)] px-3 py-3 flex gap-1.5 items-center" aria-label="المراجع الحكيم يكتب">{[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-bounce" style={{ animationDelay: `${i * 120}ms` }} />)}</div></div>}
-        </div>
-        <div className="p-2.5 border-t border-[var(--line-2)] bg-[var(--panel)]">
-          <div className="flex items-end gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-1.5 focus-within:ring-2 focus-within:ring-[var(--accent)]/20">
-            <textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} rows="1" className="flex-1 min-h-[38px] max-h-24 resize-none border-0 bg-transparent px-2 py-2 text-[12.5px] leading-5 outline-none focus:ring-0" placeholder="احكيلي الحالة زي ما هي..." disabled={busy} />
-            <button onClick={submit} disabled={!draft.trim() || busy} className="grid place-items-center w-9 h-9 rounded-lg text-white disabled:opacity-40 transition hover:scale-[1.03]" style={{ background: "var(--accent)" }} title="إرسال"><Icon name="send" size={16} /></button>
-          </div>
-          <div className="text-center text-[9.5px] text-[var(--muted)] mt-1.5">النصيحة مساعدة للمراجعة، والاعتماد النهائي مسؤولية المختص</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 function App() {
 
 // ── Theme (dark / light) ──
@@ -5540,45 +5468,24 @@ const [baseMapOpen, setBaseMapOpen] = useState(false);
   const sheetInputRef = useRef(null);
 
   const [layers, setLayers] = useState([]);
+  const undoHistoryRef = useRef([]);
+  const pushUndo = useCallback((snapshot) => {
+    undoHistoryRef.current = [...undoHistoryRef.current, snapshot].slice(-5);
+  }, []);
+  const undoLast = useCallback(() => {
+    const previous = undoHistoryRef.current.pop();
+    if (!previous) return false;
+    setLayers(current => {
+      const currentIds = new Set(current.map(l => l.id));
+      previous.forEach(l => { if (!currentIds.has(l.id) && l.visible !== false) l.leafletLayer?.addTo(mapRef.current); });
+      current.forEach(l => { if (!previous.some(p => p.id === l.id)) mapRef.current.removeLayer(l.leafletLayer); });
+      rebuildGlobalNorth(previous, showNorthEdges);
+      requestAnimationFrame(() => syncLayerStackOrder(previous));
+      return previous;
+    });
+    return true;
+  }, [showNorthEdges]);
   const layersRef = useRef([]);
-  const [wiseChatOpen, setWiseChatOpen] = useState(false);
-  const [wiseChatBusy, setWiseChatBusy] = useState(false);
-  const [wiseMessages, setWiseMessages] = useState(() => {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem("gis-wise-reviewer-chat") || "null");
-      return Array.isArray(saved) && saved.length ? saved : [WISE_REVIEWER_WELCOME];
-    } catch { return [WISE_REVIEWER_WELCOME]; }
-  });
-
-  useEffect(() => {
-    sessionStorage.setItem("gis-wise-reviewer-chat", JSON.stringify(wiseMessages.slice(-30)));
-  }, [wiseMessages]);
-
-  const clearWiseChat = () => setWiseMessages([{ ...WISE_REVIEWER_WELCOME, id: `wise-welcome-${Date.now()}` }]);
-
-  const sendWiseMessage = async (text) => {
-    const userMessage = { id: `wise-user-${Date.now()}`, role: "user", text };
-    const nextMessages = [...wiseMessages, userMessage];
-    setWiseMessages(nextMessages);
-    setWiseChatBusy(true);
-    try {
-      const response = await fetch(WISE_REVIEWER_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMessages.slice(-12).map(({ role, text }) => ({ role, content: text })),
-          context: { visibleLayers: layers.filter(layer => layer.visible).map(layer => layer.name) }
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      const reply = String(data.reply || "").trim();
-      if (!reply) throw new Error("Empty AI response");
-      setWiseMessages(current => [...current, { id: `wise-assistant-${Date.now()}`, role: "assistant", text: reply }]);
-    } catch (error) {
-      setWiseMessages(current => [...current, { id: `wise-error-${Date.now()}`, role: "assistant", text: "حصلت مشكلة بسيطة في الاتصال. جرّب تبعتلي الرسالة تاني بعد لحظة." }]);
-    } finally { setWiseChatBusy(false); }
-  };
 
 useEffect(() => {
   layersRef.current = layers;
@@ -5615,6 +5522,18 @@ useEffect(() => {
   const [layersPanelOpen, setLayersPanelOpen] = useState(true);  // floating layers tab
   const [crsWarning, setCrsWarning] = useState(null);             // unexpected-CRS modal
   const [tolerance, setTolerance] = useState(0.10);
+
+  useEffect(() => {
+    const onUndo = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        const tag = e.target?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
+        e.preventDefault(); undoLast();
+      }
+    };
+    window.addEventListener("keydown", onUndo);
+    return () => window.removeEventListener("keydown", onUndo);
+  }, [undoLast]);
 
   /* ── Global drag-and-drop overlay ──
      يشتغل على الموقع كله — ZIP/RAR يروح لـ loadShapefile، Excel/CSV لـ loadSheet */
@@ -6352,6 +6271,7 @@ return updated;
     if (!window.confirm("هل تريد حذف هذا الجزء نهائيًا من الطبقة؟")) return;
 
     setLayers(prev => {
+      pushUndo(prev);
       const updated = prev.map(l => {
         if (l.id !== layerId || l.kind !== "shapefile") return l;
 
@@ -6399,6 +6319,7 @@ return updated;
 
   const deleteLayer = (id) => {
     setLayers(prev => {
+      pushUndo(prev);
       const found = prev.find(l => l.id === id);
       if (found) mapRef.current.removeLayer(found.leafletLayer);
       const next = prev.filter(l => l.id !== id);
@@ -6420,6 +6341,7 @@ const focusLayer = (id) => {
 
   const clearAll = () => {
     if (layers.length === 0) { showToast("لا توجد طبقات لمسحها", "info"); return; }
+    pushUndo(layers);
     layers.forEach(l => mapRef.current.removeLayer(l.leafletLayer));
     setLayers([]);
     if (globalNorthRef.current) globalNorthRef.current.clearLayers();
@@ -7642,16 +7564,8 @@ title="تحريك الشيب فايل"
           </div>
         )}
 
-        <WiseReviewerChat open={wiseChatOpen} onClose={() => setWiseChatOpen(false)} messages={wiseMessages} onSend={sendWiseMessage} busy={wiseChatBusy} onClear={clearWiseChat} />
-
-        {/* Floating assistant + LAYERS tabs — bottom-left */}
-        <div className="absolute bottom-4 left-4 z-[500] w-[300px] max-w-[calc(100vw-2rem)] pointer-events-none space-y-2">
-          <button onClick={() => setWiseChatOpen(value => !value)} className="w-full pointer-events-auto flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-lg hover:-translate-y-0.5 transition text-right" aria-expanded={wiseChatOpen} title="فتح المراجع الحكيم">
-            <span className="relative grid place-items-center w-9 h-9 rounded-xl text-white shrink-0" style={{ background: "linear-gradient(135deg, var(--accent), #2563eb)" }}><Icon name="sparkles" size={17} /><span className="absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--panel)]" /></span>
-            <div className="flex-1 min-w-0"><div className="text-[13px] font-bold text-[var(--ink)] leading-tight">المراجع الحكيم</div><div className="text-[10.5px] text-[var(--ink-soft)] mt-0.5">احكيلي الحالة ونراجعها سوا</div></div>
-            <Icon name={wiseChatOpen ? "close" : "chevronUp"} size={16} className="text-[var(--ink-soft)]" />
-          </button>
-
+        {/* Floating LAYERS tab — bottom-left */}
+        <div className="absolute bottom-4 left-4 z-[500] w-[300px] max-w-[calc(100vw-2rem)] pointer-events-none">
           <div className="bg-[var(--panel)] rounded-2xl border border-[var(--line)] shadow-lg overflow-hidden flex flex-col pointer-events-auto">
             {/* Body (expanded list) */}
             {layersPanelOpen && (
